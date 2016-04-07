@@ -13,32 +13,21 @@
 
 ; parsed expression
 
-(define-datatype expression expression?
-	[app-exp (func expression?)
-			(paras (lambda(x) (andmap expression? x)))]
-	[lambda-exp (ident (lambda(x) (andmap-implst symbol? x)))
-			(opers (lambda(x) (andmap expression? x)))]
-	[let-exp (indentInit (lambda(x) (andmap (lambda(y)(and (symbol? (car y))(expression? (cdr y)))) x)))
-			(opers (lambda(x) (andmap expression? x)))]
-	[let*-exp (indentInit (lambda(x) (andmap (lambda(y)(and (symbol? (car y))(expression? (cdr y)))) x)))
-			(opers (lambda(x) (andmap expression? x)))]
-	[letrec-exp (indentInit (lambda(x) (andmap (lambda(y)(and (symbol? (car y))(expression? (cdr y)))) x)))
-			(opers (lambda(x) (andmap expression? x)))]
-	[let-named-exp (name symbol?)
-			(indentInit (lambda(x) (andmap (lambda(y)(and (symbol? (car y))(expression? (cdr y)))) x)))
-			(opers (lambda(x) (andmap expression? x)))]
-	[if-exp (test expression?)
-			(then-op expression?)
-			(else-op expression?)]
-	[set!-exp (var symbol?)
-			(val expression?)]
-	[var-exp (var symbol?)]
-	[lit-exp (lit (lambda(x) (or 
-				(number? x)
-				(eq? x #f)(eq? x #t)
-				(string? x)
-				(vector? x))))])
+(define-datatype expression expression?  
+  [var-exp        ; variable references
+   (id symbol?)]
+  [lit-exp        ; "Normal" data.  Did I leave out any types?
+   (datum
+    (lambda (x)
+      (ormap 
+       (lambda (pred) (pred x))
+       (list number? vector? boolean? symbol? string? pair? null?))))]
+  [app-exp        ; applications
+   (rator expression?)
+   (rands (list-of expression?))]  
+  )
 
+	
 	
 
 ;; environment type definitions
@@ -74,98 +63,24 @@
 ; You will want to replace this with your parser that includes more expression types, more options for these types, and error-checking.
 
 ; Procedures to make the parser a little bit saner.
+(define 1st car)
+(define 2nd cadr)
+(define 3rd caddr)
 
-
-
-
-(define parse-exp
+(define parse-exp         
   (lambda (datum)
     (cond
      [(symbol? datum) (var-exp datum)]
      [(number? datum) (lit-exp datum)]
-     [(vector? datum) (lit-exp datum)]
      [(pair? datum)
       (cond
-       [(eq? (car datum) 'lambda)
-       		(if (null? (cddr datum))
-       			(eopl:error 'parse-exp "lambda expression: incorrect length: ~s" datum))
-       		(if (not (andmap-implst symbol? (cadr datum)))
-       			(eopl:error 'parse-exp "lambda declaration list: formers must be symbols ~s" (cadr datum)))
-       		(lambda-exp (cadr datum) (map parse-exp (cddr datum)))]
-       [(or (eq? (car datum) 'letrec) (eq? (car datum) 'let) (eq? (car datum) 'let*))
-       		(if (null? (cdr datum))
-				(eopl:error 'parse-exp "~s expression: incorrect length: ~s" (car datum) datum))
-       		(let ([letarg (cadr datum)] [letop (cddr datum)])
-       			(if (not (list? (cadr datum)))
-       				(begin (set! letarg (caddr datum))
-       					(set! letop (cdddr datum))))
-   				(if (null? letop)
-	       			(eopl:error 'parse-exp "~s expression: incorrect length: ~s" (car datum) letop))
-	       		(if (not (list? letarg))
-	       			(eopl:error 'parse-exp "~s declaration list: not a proper list: ~s" (car datum) letarg))
-	       		(set! letarg (map (lambda(x) 
-	       						(if (not (list? x))
-	       							(eopl:error 'parse-exp "~s declaration pairs: not all proper list: ~s" (car datum) letarg))
-								(if (not (symbol? (car x)))
-	       							(eopl:error 'parse-exp "~s declaration pairs: first members must be symbols: ~s" (car datum) letarg))
-								(if (not (= (length x) 2))
-	       							(eopl:error 'parse-exp "~s declaration pairs: not all length 2: ~s" (car datum) letarg))
-	       					(cons (car x)(parse-exp (cadr x)))) (cadr datum)))
-	       		(set! letop (map parse-exp (cddr datum)))
-       			(if (list? (cadr datum))
-       				(cond [(eq? (car datum) 'let)
-       						(let-exp letarg letop)]
-       					[(eq? (car datum) 'let*)
-       						(let*-exp letarg letop)]
-       					[(eq? (car datum) 'letrec)
-       						(letrec-exp letarg letop)])
-       				(let-named-exp (cadr datum) letarg letop)))]
-       [(eq? (car datum) 'if)
-			(if (null? (cddr datum))
-       			(eopl:error 'parse-exp "if expression: incorrect length: ~s" datum))
-       		(if (> (length datum) 4)
-       			(eopl:error 'parse-exp "if expression: should have (only) test, then, and else clauses: ~s" datum))
-       		(if-exp (parse-exp (cadr datum)) (parse-exp (caddr datum)) (parse-exp (cadddr datum)))]
-       [(eq? (car datum) 'set!)
-       		(if (null? (cddr datum))
-       			(eopl:error 'parse-exp "set! expression: missing expression: ~s" datum))
-       		(if (> (length datum) 3)
-       			(eopl:error 'parse-exp "set! expression: too many parts: ~s" datum))
-       		(set!-exp (cadr datum) (parse-exp (caddr datum)))]
-       [else
-       		(if (not (list? datum))
-       			(eopl:error 'parse-exp "Error in parse-exp: application ~s is not a proper list" datum))
-       		(app-exp (parse-exp (car datum)) (map parse-exp (cdr datum)))])]
+       
+       [else (app-exp (parse-exp (1st datum))
+		      (map parse-exp (cdr datum)))])]
      [else (eopl:error 'parse-exp "bad expression: ~s" datum)])))
 
 
-(define unparse-exp
-	(lambda (expr)
-		(cases expression expr
-			[app-exp (func paras)
-					(cons (unparse-exp func) (map unparse-exp paras))]
-			[lambda-exp (ident opers)
-					(cons* 'lambda ident (map unparse-exp opers))]
-			[if-exp (test then-op else-op)
-					(list 'if (unparse-exp test) (unparse-exp then-op) (unparse-exp else-op))]
-			[set!-exp (var val)
-					(list 'set! var (unparse-exp val))]
-			[let-exp (indentInit opers)			
-					(cons* 'let (map (lambda(x)(list (car x)(unparse-exp (cdr x)))) indentInit)
-						(map unparse-exp opers))]
-			[let*-exp (indentInit opers)			
-					(cons* 'let* (map (lambda(x)(list (car x)(unparse-exp (cdr x)))) indentInit)
-						(map unparse-exp opers))]
-			[letrec-exp (indentInit opers)			
-					(cons* 'letrec (map (lambda(x)(list (car x)(unparse-exp (cdr x)))) indentInit)
-						(map unparse-exp opers))]
-			[let-named-exp (name indentInit opers)			
-					(cons* 'let name (map (lambda(x)(list (car x)(unparse-exp (cdr x)))) indentInit)
-						(map unparse-exp opers))]
-			[var-exp (var)
-					var]
-			[lit-exp (var)
-					var])))
+
 
 
 
