@@ -320,11 +320,13 @@
 (define apply-prim-proc
   (lambda (prim-proc args)
     (case prim-proc
-      [(+) (+ (1st args) (2nd args))]
-      [(-) (- (1st args) (2nd args))]
-      [(*) (* (1st args) (2nd args))]
+      [(+) (apply + args)]
+      [(-) (apply - args)]
+      [(*) (apply * args)]
       [(add1) (+ (1st args) 1)]
       [(sub1) (- (1st args) 1)]
+      [(not) (not (1st args))] ;error handling needed
+      ; [()]
       [(cons) (cons (1st args) (2nd args))]
       [(=) (= (1st args) (2nd args))]
       [else (error 'apply-prim-proc 
