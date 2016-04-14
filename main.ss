@@ -114,12 +114,12 @@
      [(number? datum) (lit-exp datum)]
      [(vector? datum) (lit-exp datum)]
      [(boolean? datum) (lit-exp datum)]
-     [(eqv? 'quote (1st datum))
-      (if (not (null? (cddr datum)))
-        (eopl:error 'parse-exp "quote expression: incorrect length: ~s" datum))
-      (quote-exp (2nd datum))]
      [(pair? datum)
       (cond
+       [(eqv? 'quote (1st datum))
+	      (if (not (null? (cddr datum)))
+	        (eopl:error 'parse-exp "quote expression: incorrect length: ~s" datum))
+	      (quote-exp (2nd datum))]
        [(eq? (car datum) 'lambda)
           (if (null? (cddr datum))
             (eopl:error 'parse-exp "lambda expression: incorrect length: ~s" datum))
@@ -150,7 +150,7 @@
           (let-exp (car datum) letarg letop)
               (let-named-exp (cadr datum) letarg letop)))]
        [(eq? (car datum) 'if)
-      (if (null? (cddr datum))
+      		(if (null? (cddr datum))
             (eopl:error 'parse-exp "if expression: incorrect length: ~s" datum))
           (if (> (length datum) 4)
             (eopl:error 'parse-exp "if expression: should have (only) test, then, and else clauses: ~s" datum))
