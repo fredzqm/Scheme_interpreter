@@ -109,6 +109,10 @@
      [(number? datum) (lit-exp datum)]
      [(vector? datum) (lit-exp datum)]
      [(boolean? datum) (lit-exp datum)]
+     [(eqv? 'quote (1st datum))
+      (if (not (null? (cddr datum)))
+        (eopl:error 'parse-exp "quote expression: incorrect length: ~s" datum))
+      (lit-exp (2nd datum))]
      [(pair? datum)
       (cond
        [(eq? (car datum) 'lambda)
