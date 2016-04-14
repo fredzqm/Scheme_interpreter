@@ -279,7 +279,8 @@
            (lambda () (eopl:error 'apply-env ; procedure to call if id not in env
 		          "variable not found in environment: ~s"
 			   id)))]
-      [if-exp ]
+      [if-exp (test then-op else-op)
+        (if (eval-exp test) (eval-exp then-op) (eval-exp else-op))]
       [app-exp (rator rands)
         (let ([proc-value (eval-exp rator)]
               [args (eval-rands rands)])
@@ -320,13 +321,22 @@
 (define apply-prim-proc
   (lambda (prim-proc args)
     (case prim-proc
-      [(+) (apply + args)]
-      [(-) (apply - args)]
-      [(*) (apply * args)]
+      [(+) (if ((list-of number?) args) (apply + args) (eopl:error 'apply-prim-proc "Arguments must be a list of numbers: ~s (~s)" args prim-proc))]
+      [(-) (if ((list-of number?) args) (apply - args) (eopl:error 'apply-prim-proc "Arguments must be a list of numbers: ~s (~s)" args prim-proc))]
+      [(*) (if ((list-of number?) args) (apply * args) (eopl:error 'apply-prim-proc "Arguments must be a list of numbers: ~s (~s)" args prim-proc))]
+      [(/) (cond
+              [(not ((list-of number?) args)) (eopl:error 'apply-prim-proc "Arguments must be a list of numbers: ~s" args)]
+              [(ormap zero? args)) (eopl:error 'apply-prim-proc "Arguments must be non-zero: ~s (~s)" args prim-proc)]
+              [else (apply / args)])]
       [(add1) (+ (1st args) 1)]
       [(sub1) (- (1st args) 1)]
       [(not) (not (1st args))] ;error handling needed
-      ; [()]
+; add1, sub1, zero?, not, = and < (and the other
+; numeric comparison operators), and also cons, car, cdr, list, null?, assq, eq?, equal?,
+; atom?, length, list->vector, list?, pair?, procedure?, vector->list, vector,
+; make-vector, vector-ref, vector?, number?, symbol?, set-car! , set-cdr!,
+; vector-set!, display , newline to your interpreter. Add the c**r and c***r procedures
+; (where each "*" stands for an "a" or "d").
       [(cons) (cons (1st args) (2nd args))]
       [(=) (= (1st args) (2nd args))]
       [else (error 'apply-prim-proc 
@@ -345,10 +355,16 @@
 (define eval-one-exp
   (lambda (x) (top-level-eval (parse-exp x))))
 
+; Other Utility Methods
+(define not-pred
+  (lambda (pred?)
+    (lambda (arg)
+      (not (pred? arg)))))
 
-
-
-
+(define equal-to-n
+  (lambda (n)
+    (lambda (arg)
+      (= n arg))))
 
 
 
