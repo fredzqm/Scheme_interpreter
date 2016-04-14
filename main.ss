@@ -306,7 +306,7 @@
                    "Attempt to apply bad procedure: ~s" 
                     proc-value)])))
 
-(define *prim-proc-names* '(+ - * add1 sub1 cons =))
+(define *prim-proc-names* '(+ - * / add1 sub1 not cons =))
 
 (define init-env         ; for now, our initial global environment only contains 
   (extend-env            ; procedure names.  Recall that an environment associates
@@ -326,7 +326,7 @@
       [(*) (if ((list-of number?) args) (apply * args) (eopl:error 'apply-prim-proc "Arguments must be a list of numbers: ~s (~s)" args prim-proc))]
       [(/) (cond
               [(not ((list-of number?) args)) (eopl:error 'apply-prim-proc "Arguments must be a list of numbers: ~s" args)]
-              [(ormap zero? args)) (eopl:error 'apply-prim-proc "Arguments must be non-zero: ~s (~s)" args prim-proc)]
+              [(ormap zero? args) (eopl:error 'apply-prim-proc "Arguments must be non-zero: ~s (~s)" args prim-proc)]
               [else (apply / args)])]
       [(add1) (+ (1st args) 1)]
       [(sub1) (- (1st args) 1)]
