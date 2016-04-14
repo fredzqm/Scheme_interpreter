@@ -47,6 +47,11 @@
   [if-exp (test expression?)
       (then-op expression?)
       (else-op expression?)]
+  [quote-exp 
+        (datum (lambda (x)
+          (ormap 
+           (lambda (pred) (pred x))
+           (list number? vector? boolean? symbol? string? pair? null?))))]
   [set!-exp (var symbol?)
       (val expression?)])
 
@@ -112,7 +117,7 @@
      [(eqv? 'quote (1st datum))
       (if (not (null? (cddr datum)))
         (eopl:error 'parse-exp "quote expression: incorrect length: ~s" datum))
-      (lit-exp (2nd datum))]
+      (quote-exp (2nd datum))]
      [(pair? datum)
       (cond
        [(eq? (car datum) 'lambda)
@@ -180,6 +185,8 @@
       [let-named-exp (name vars-ls body)      
           (cons* 'let name (map (lambda(x)(list (car x)(unparse-exp (cdr x)))) vars-ls)
             (map unparse-exp body))]
+      [quote-exp (datum)
+          (list 'quote datum)]
       [var-exp (id)
           id]
       [lit-exp (var)
@@ -277,6 +284,7 @@
   (lambda (exp)
     (cases expression exp
       [lit-exp (datum) datum]
+      [quote-exp (datum) datum]
       [var-exp (id)
 				(apply-env init-env id; look up its value.
       	   (lambda (x) x) ; procedure to call if id is in the environment 
