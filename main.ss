@@ -318,7 +318,11 @@
                    "Attempt to apply bad procedure: ~s" 
                     proc-value)])))
 
-(define *prim-proc-names* '(+ - * / add1 sub1 not cons =))
+(define *prim-proc-names* '(+ - * / add1 sub1 zero? not = < > <= >= cons list null? assq eq? equal?
+                            atom? car caar caaar caadr cadar cdaar caddr cdadr cddar cdddr cadr
+                            cdar cddr cdr length list->vector list? pair? procedure? vector->list
+                            vector make-vector vector-ref vector? number? symbol? set-car! set-cdr!
+                            vector-set! display newline))
 
 (define init-env         ; for now, our initial global environment only contains 
   (extend-env            ; procedure names.  Recall that an environment associates
@@ -333,24 +337,57 @@
 (define apply-prim-proc
   (lambda (prim-proc args)
     (case prim-proc
-      [(+) (if ((list-of number?) args) (apply + args) (eopl:error 'apply-prim-proc "Arguments must be a list of numbers: ~s (~s)" args prim-proc))]
-      [(-) (if ((list-of number?) args) (apply - args) (eopl:error 'apply-prim-proc "Arguments must be a list of numbers: ~s (~s)" args prim-proc))]
-      [(*) (if ((list-of number?) args) (apply * args) (eopl:error 'apply-prim-proc "Arguments must be a list of numbers: ~s (~s)" args prim-proc))]
-      [(/) (cond
-              [(not ((list-of number?) args)) (eopl:error 'apply-prim-proc "Arguments must be a list of numbers: ~s" args)]
-              [(ormap zero? args) (eopl:error 'apply-prim-proc "Arguments must be non-zero: ~s (~s)" args prim-proc)]
-              [else (apply / args)])]
-      [(add1) (+ (1st args) 1)]
+      [(+) (apply + args)]
+      [(-) (apply - args)]
+      [(*) (apply * args)]
+      [(/) (apply / args)]
+      [(add1) (+ (1st args) 1)] ; Error-handling for more than 1 args?
       [(sub1) (- (1st args) 1)]
-      [(not) (not (1st args))] ;error handling needed
-; add1, sub1, zero?, not, = and < (and the other
-; numeric comparison operators), and also cons, car, cdr, list, null?, assq, eq?, equal?,
-; atom?, length, list->vector, list?, pair?, procedure?, vector->list, vector,
-; make-vector, vector-ref, vector?, number?, symbol?, set-car! , set-cdr!,
-; vector-set!, display , newline to your interpreter. Add the c**r and c***r procedures
-; (where each "*" stands for an "a" or "d").
-      [(cons) (cons (1st args) (2nd args))]
+      [(zero?) (zero? (1st args))]
+      [(not) (not (1st args))]
       [(=) (= (1st args) (2nd args))]
+      [(<) (apply < args)]
+      [(>) (apply > args)]
+      [(<=) (apply <= args)]
+      [(>=) (apply >= args)]
+      [(cons) (cons (1st args) (2nd args))]
+      [(list) (apply list args)]
+      [(null?) (apply null? args)]
+      [(assq) (apply assq args)]
+      [(eq?) (apply eq? args)]
+      [(equal?) (apply equal? args)]
+      [(atom?) (apply atom? args)]
+      [(car) (apply car args)]
+      [(caar) (apply caar args)]
+      [(caaar) (apply caaar args)]
+      [(caadr) (apply caadr args)]
+      [(cadar) (apply cadar args)]
+      [(cdaar) (apply cdaar args)]
+      [(caddr) (apply caddr args)]
+      [(cdadr) (apply cdadr args)]
+      [(cddar) (apply cddar args)]
+      [(cdddr) (apply cdddr args)]
+      [(cadr) (apply cadr args)]
+      [(cdar) (apply cdar args)]
+      [(cddr) (apply cddr args)]
+      [(cdr) (apply cdr args)]
+      [(length) (apply length args)]
+      [(list->vector) (apply list->vector args)]
+      [(list?) (apply list? args)]
+      [(pair?) (apply pair? args)]
+      [(procedure?) (apply procedure? args)]
+      [(vector->list) (apply vector->list args)]
+      [(vector) (apply vector args)]
+      [(make-vector) (apply make-vector args)]
+      [(vector-ref) (apply vector-ref args)]
+      [(vector?) (apply vector? args)]
+      [(number?) (apply number? args)]
+      [(symbol?) (apply symbol? args)]
+      [(set-car!) (apply set-car! args)]
+      [(set-cdr!) (apply set-cdr! args)]
+      [(vector-set!) (apply vector-set! args)]
+      [(display) (apply display args)]
+      [(newline) (apply newline args)]
       [else (error 'apply-prim-proc 
             "Bad primitive procedure name: ~s" 
             prim-proc)])))
