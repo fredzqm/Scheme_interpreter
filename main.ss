@@ -123,6 +123,8 @@
      [(number? datum) (lit-exp datum)]
      [(vector? datum) (lit-exp datum)]
      [(boolean? datum) (lit-exp datum)]
+     [(string? datum) (lit-exp datum)]
+     [(null? datum) (lit-exp datum)]
      [(pair? datum)
       (cond
        [(eqv? 'quote (1st datum))
@@ -242,13 +244,10 @@
       (empty-env-record ()
         (fail))
       (extended-env-record (syms vals env)
-	(let ((pos (list-find-position sym syms)))
-      	  (if (number? pos)
-	      (succeed (list-ref vals pos))
-	      (apply-env env sym succeed fail)))))))
-
-
-
+    	  (let ((pos (list-find-position sym syms)))
+        	(if (number? pos)
+    	      (succeed (list-ref vals pos))
+    	      (apply-env env sym succeed fail)))))))
 
 
 
@@ -298,12 +297,17 @@
 				(apply-env env id; look up its value.
       	   (lambda (x) x) ; procedure to call if id is in the environment 
            (lambda () (eopl:error 'apply-env ; procedure to call if id not in env
-		          "variable not found in environment: ~s"
-			   id)))]
+		          "variable not found in environment: ~s" id)))]
       [if-exp (test then-op else-op)
         (if (eval-exp test env) (eval-exp then-op env) (eval-exp else-op env))]
       [lambda-exp (vars body)
         (closure vars body env)]
+      [let-exp (lettype vars-ls body)
+        (case lettype
+          [(let) (eval-exp (app-exp
+              (lambda-exp (map car vars-ls) body)
+              (map cdr vars-ls)) env)]
+        [else eopl:error 'eval-exp "Bad type of let expression"])]
       [app-exp (rator rands)
         (let ([proc-value (eval-exp rator env)]
               [args (map (lambda(x) (eval-exp x env)) rands)])
