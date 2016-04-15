@@ -62,15 +62,11 @@
       (val expression?)])
 
 ;; environment type definitions
-
-(define scheme-value?
-  (lambda (x) #t))
-
 (define-datatype environment environment?
   (empty-env-record)
   (extended-env-record
    (syms (list-of symbol?))
-   (vals (list-of scheme-value?))
+   (vals list?)
    (env environment?)))
 
 ; datatype for procedures.  At first there is only one
@@ -330,10 +326,10 @@
       [prim-proc (op) (apply-prim-proc op args)]
 			[closure (vars body env)
         (let lambdaEval ([code body][env (extend-env vars args env)])
-          (if (null? (cdr body))
-            (eval-exp (car body) env)
-            (begin (eval-exp (car body) env)
-              (lambdaEval (cdr body) env))))]
+          (if (null? (cdr code))
+            (eval-exp (car code) env)
+            (begin (eval-exp (car code) env)
+              (lambdaEval (cdr code) env))))]
       ; You will add other cases
       [else (eopl:error 'apply-proc
                    "Attempt to apply bad procedure: ~s" 
@@ -396,7 +392,7 @@
       [(list->vector) (apply list->vector args)]
       [(list?) (apply list? args)]
       [(pair?) (apply pair? args)]
-      [(procedure?) (apply procedure? args)]
+      [(procedure?) (apply proc-val? args)]
       [(vector->list) (apply vector->list args)]
       [(vector) (apply vector args)]
       [(make-vector) (apply make-vector args)]
