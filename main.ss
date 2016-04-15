@@ -360,20 +360,8 @@
       [(/) (apply / args)]
       [(add1) (+ (1st args) 1)] ; Error-handling for more than 1 args?
       [(sub1) (- (1st args) 1)]
-<<<<<<< HEAD
-      [(not) (not (1st args))] 
-;error handling needed
-; add1, sub1, zero?, not, = and < (and the other
-; numeric comparison operators), and also cons, car, cdr, list, null?, assq, eq?, equal?,
-; atom?, length, list->vector, list?, pair?, procedure?, vector->list, vector,
-; make-vector, vector-ref, vector?, number?, symbol?, set-car! , set-cdr!,
-; vector-set!, display , newline to your interpreter. Add the c**r and c***r procedures
-; (where each "*" stands for an "a" or "d").
-      [(cons) (cons (1st args) (2nd args))]
-=======
       [(zero?) (zero? (1st args))]
       [(not) (not (1st args))]
->>>>>>> origin/master
       [(=) (= (1st args) (2nd args))]
       [(<) (apply < args)]
       [(>) (apply > args)]
