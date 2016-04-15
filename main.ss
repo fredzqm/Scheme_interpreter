@@ -26,6 +26,12 @@
 ;    (rator expression?)
 ;    (rands (list-of expression?))]  
 ;   )
+(define (implist-of pred?)
+  (lambda(implst)
+    (let helper ([ls implst])
+      (or (null? ls) (pred? ls)
+        (and (pred? (car ls)) (helper (cdr ls)))))))
+
 
 (define-datatype expression expression?
   [var-exp (id symbol?)]
@@ -72,8 +78,11 @@
 
 (define-datatype proc-val proc-val?
   [prim-proc
-   (name symbol?)])
-	 
+   (name symbol?)]
+  [closure (vars (implist-of symbol?))
+      (body (list-of expression?))
+      (env environment?)])
+   
 	
 
 ;-------------------+
@@ -276,34 +285,36 @@
 (define top-level-eval
   (lambda (form)
     ; later we may add things that are not expressions.
-    (eval-exp form)))
+    (eval-exp form init-env)))
 
 ; eval-exp is the main component of the interpreter
 
 (define eval-exp
-  (lambda (exp)
+  (lambda (exp env)
     (cases expression exp
       [lit-exp (datum) datum]
       [quote-exp (datum) datum]
       [var-exp (id)
-				(apply-env init-env id; look up its value.
+				(apply-env env id; look up its value.
       	   (lambda (x) x) ; procedure to call if id is in the environment 
            (lambda () (eopl:error 'apply-env ; procedure to call if id not in env
 		          "variable not found in environment: ~s"
 			   id)))]
       [if-exp (test then-op else-op)
-        (if (eval-exp test) (eval-exp then-op) (eval-exp else-op))]
+        (if (eval-exp test env) (eval-exp then-op env) (eval-exp else-op env))]
+      [lambda-exp (vars body)
+        (closure vars body env)]
       [app-exp (rator rands)
-        (let ([proc-value (eval-exp rator)]
-              [args (eval-rands rands)])
+        (let ([proc-value (eval-exp rator env)]
+              [args (map (lambda(x) (eval-exp x env)) rands)])
           (apply-proc proc-value args))]
       [else (eopl:error 'eval-exp "Bad abstract syntax: ~a" exp)])))
 
 ; evaluate the list of operands, putting results into a list
 
-(define eval-rands
-  (lambda (rands)
-    (map eval-exp rands)))
+; (define map (lambda(x) (eval-exp x env))
+;   (lambda (rands)
+;     (map eval-exp rands)))
 
 ;  Apply a procedure to its arguments.
 ;  At this point, we only have primitive procedures.  
@@ -313,7 +324,13 @@
   (lambda (proc-value args)
     (cases proc-val proc-value
       [prim-proc (op) (apply-prim-proc op args)]
-			; You will add other cases
+			[closure (vars body env)
+        (let lambdaEval ([code body][env (extend-env vars args env)])
+          (if (null? (cdr body))
+            (eval-exp (car body) env)
+            (begin (eval-exp (car body) env)
+              (lambdaEval (cdr body) env))))]
+      ; You will add other cases
       [else (eopl:error 'apply-proc
                    "Attempt to apply bad procedure: ~s" 
                     proc-value)])))
@@ -342,7 +359,8 @@
               [else (apply / args)])]
       [(add1) (+ (1st args) 1)]
       [(sub1) (- (1st args) 1)]
-      [(not) (not (1st args))] ;error handling needed
+      [(not) (not (1st args))] 
+;error handling needed
 ; add1, sub1, zero?, not, = and < (and the other
 ; numeric comparison operators), and also cons, car, cdr, list, null?, assq, eq?, equal?,
 ; atom?, length, list->vector, list?, pair?, procedure?, vector->list, vector,
