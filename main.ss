@@ -50,9 +50,11 @@
   [let-named-exp (name symbol?)
       (vars-ls (list-of (lambda(y)(and (symbol? (car y))(expression? (cdr y))))))
       (body (list-of expression?))]
-  [if-exp (test expression?)
+  [if-exp
+      (two-armed? boolean?)
+      (test expression?)
       (then-op expression?)
-      (else-op expression?)]
+      (else-op (or-pred null? expression?))]
   [quote-exp 
         (datum (lambda (x)
           (ormap 
@@ -157,11 +159,11 @@
           (let-exp (car datum) letarg letop)
               (let-named-exp (cadr datum) letarg letop)))]
        [(eq? (car datum) 'if)
-      		(if (null? (cddr datum))
-            (eopl:error 'parse-exp "if expression: incorrect length: ~s" datum))
-          (if (> (length datum) 4)
-            (eopl:error 'parse-exp "if expression: should have (only) test, then, and else clauses: ~s" datum))
-          (if-exp (parse-exp (cadr datum)) (parse-exp (caddr datum)) (parse-exp (cadddr datum)))]
+          (cond
+            [(= (length datum) 4) (if-exp #t (parse-exp (cadr datum)) (parse-exp (caddr datum)) (parse-exp (cadddr datum)))]
+            [(= (length datum) 3) (if-exp #f (parse-exp (cadr datum)) (parse-exp (caddr datum)) '())]
+            [(= (length datum) 2) (eopl:error 'parse-exp "if expression: should have at least test and then clauses: ~s" datum)]
+            [else (eopl:error 'parse-exp "if expression: should have only test, then, and (optional) else clauses: ~s" datum)])]
        [(eq? (car datum) 'set!)
           (if (null? (cddr datum))
             (eopl:error 'parse-exp "set! expression: missing expression: ~s" datum))
@@ -294,8 +296,11 @@
       	   (lambda (x) x) ; procedure to call if id is in the environment 
            (lambda () (eopl:error 'apply-env ; procedure to call if id not in env
 		          "variable not found in environment: ~s" id)))]
-      [if-exp (test then-op else-op)
-        (if (eval-exp test env) (eval-exp then-op env) (eval-exp else-op env))]
+      [if-exp (two-armed? test then-op else-op)
+        (if
+          (eval-exp test env)
+          (eval-exp then-op env)
+          (if two-armed? (eval-exp else-op env)))]
       [lambda-exp (vars body)
         (closure vars body env)]
       [let-exp (lettype vars-ls body)
@@ -449,5 +454,9 @@
     (lambda (arg)
       (= n arg))))
 
+(define or-pred
+  (lambda (preda predb)
+    (lambda (obj)
+      (or (preda obj) (predb obj)))))
 
 
