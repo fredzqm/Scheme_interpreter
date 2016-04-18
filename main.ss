@@ -292,8 +292,11 @@
       [var-exp (id)
 				(apply-env env id; look up its value.
       	   (lambda (x) x) ; procedure to call if id is in the environment 
-           (lambda () (eopl:error 'apply-env ; procedure to call if id not in env
-		          "variable not found in environment: ~s" id)))]
+           (lambda ()
+             (apply-env global-env id
+                (lambda (x) x)
+                (lambda () (eopl:error 'apply-env ; procedure to call if id not in env
+                  "variable not found in environment: ~s" id)))))]
       [if-exp (test then-op else-op)
         (if (eval-exp test env) (eval-exp then-op env) (eval-exp else-op env))]
       [lambda-exp (vars body)
@@ -343,6 +346,7 @@
                       (eopl:error 'apply-proc "not enough arguments: closure ~a ~a" proc-value args))
                     (list args)))
               env))])
+          (display env)
           (if (null? (cdr code))
             (eval-exp (car code) env)
             (begin (eval-exp (car code) env)
@@ -358,7 +362,7 @@
                             vector make-vector vector-ref vector? number? symbol? set-car! set-cdr!
                             vector-set! display newline))
 
-(define init-env         ; for now, our initial global environment only contains 
+(define global-env         ; for now, our initial global environment only contains 
   (extend-env            ; procedure names.  Recall that an environment associates
      *prim-proc-names*   ;  a value (not an expression) with an identifier.
      (map prim-proc      
