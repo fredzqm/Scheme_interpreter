@@ -184,8 +184,10 @@
           (cons (unparse-exp rator) (map unparse-exp rands))]
       [lambda-exp (vars body)
           (cons* 'lambda vars (map unparse-exp body))]
-      [if-exp (test then-op else-op)
-          (list 'if (unparse-exp test) (unparse-exp then-op) (unparse-exp else-op))]
+      [if-exp (two-armed? test then-op else-op)
+          (if two-armed?
+            (list 'if (unparse-exp test) (unparse-exp then-op) (unparse-exp else-op))
+            (list 'if (unparse-exp test) (unparse-exp then-op)))]
       [set!-exp (var val)
           (list 'set! var (unparse-exp val))]
       [let-exp (lettype vars-ls body)     
