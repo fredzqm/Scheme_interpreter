@@ -280,7 +280,7 @@
 (define top-level-eval
   (lambda (form)
     ; later we may add things that are not expressions.
-    (eval-exp form init-env)))
+    (eval-exp form (empty-env))))
 
 ; eval-exp is the main component of the interpreter
 
@@ -325,7 +325,24 @@
     (cases proc-val proc-value
       [prim-proc (op) (apply-prim-proc op args)]
 			[closure (vars body env)
-        (let lambdaEval ([code body][env (extend-env vars args env)])
+        (let lambdaEval ([code body]
+          [env 
+            (if (list? vars)
+              (if (= (length vars)(length args))
+                (extend-env vars args env)
+                (eopl:error 'apply-proc "incorrect number of argument: closure ~a ~a" proc-value args))
+              (extend-env
+                (let loop ([vars vars]) ; convert improper list to a list
+                  (if (pair? vars)
+                    (cons (car vars) (loop (cdr vars)))
+                    (list vars)))
+                (let loop ([vars vars][args args]) ; match all parts of args to vars
+                  (if (pair? vars)
+                    (if (pair? args)
+                      (cons (car args) (loop (cdr vars)(cdr args)))
+                      (eopl:error 'apply-proc "not enough arguments: closure ~a ~a" proc-value args))
+                    (list args)))
+              env))])
           (if (null? (cdr code))
             (eval-exp (car code) env)
             (begin (eval-exp (car code) env)
