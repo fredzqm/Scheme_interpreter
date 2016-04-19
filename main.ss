@@ -286,20 +286,6 @@
     ; later we may add things that are not expressions.
     (eval-exp form (empty-env))))
 
-(define syntax-expand
-  (lambda (exp)
-    (cases expression exp
-      [let-exp (lettype vars-ls body)
-        (case lettype
-          [(let) (app-exp (lambda-exp (map car vars-ls) (map syntax-expand body)) (map cdr vars-ls))]
-          [(let*) (syntax-expand 
-            (if (null? (cdr vars-ls)) (let-exp 'let vars-ls body)
-              (let-exp 'let (list (car vars-ls))
-                (list (let-exp 'let* (cdr vars-ls) body)))))]
-          [(letrec) (eopl:error 'syntax-expand "Not implemented")]
-          [(letrec*) (eopl:error 'syntax-expand "Not implemented")])]
-      [else exp])))
-
 ; eval-exp is the main component of the interpreter
 
 (define eval-exp
@@ -321,10 +307,53 @@
           (if two-armed? (eval-exp else-op env)))]
       [lambda-exp (vars body)
         (closure vars body env)]
+      
+      [let-exp (lettype vars-ls body)
+        (eval-exp (case lettype
+          [(let) 
+            (app-exp (lambda-exp (map car vars-ls) body)
+              (map cdr vars-ls))]
+          [(let*)  
+            (if (null? vars-ls) ; This is will create an extra let with null vars-ls
+              (let-exp 'let vars-ls body)
+              (let-exp 'let (list (car vars-ls))
+                (list (let-exp 'let* (cdr vars-ls) body))))]
+          [(letrec) (eopl:error 'eval-exp "Not implemented")]
+          [(letrec*) (eopl:error 'eval-exp "Not implemented")])
+        env)]
+
       [app-exp (rator rands)
-        (let ([proc-value (eval-exp rator env)]
-              [args (map (lambda(x) (eval-exp x env)) rands)])
-          (apply-proc proc-value args))]
+        (cases expression rator
+          [var-exp (sym)
+            (case sym
+              [(begin)
+                (eval-exp (app-exp (lambda-exp '() rands) '()) env)]
+              [(and)
+                (eval-exp 
+                  (cond
+                    [(null? rands) (lit-exp #f)]
+                    [(null? (cdr rands)) (car rands)]
+                    [else (if-exp #t (car rands)
+                      (app-exp (var-exp 'and) (cdr rands))
+                      (lit-exp #f))])
+                env)]
+              [(or)
+                (eval-exp 
+                  (cond
+                    [(null? rands) (lit-exp #t)]
+                    [(null? (cdr rands)) (car rands)]
+                    [else (let-exp 'let
+                        (list (cons 'val (car rands)))
+                        (list (if-exp #t (var-exp 'val) (var-exp 'val) 
+                            (app-exp (var-exp 'or) (cdr rands)))))])
+                env)]
+              [else (let ([proc-value (eval-exp rator env)]
+                  [args (map (lambda(x) (eval-exp x env)) rands)])
+                (apply-proc proc-value args))])]
+
+          [else (let ([proc-value (eval-exp rator env)]
+                  [args (map (lambda(x) (eval-exp x env)) rands)])
+              (apply-proc proc-value args))])]
       [else (eopl:error 'eval-exp "Bad abstract syntax: ~a" exp)])))
 
 ; evaluate the list of operands, putting results into a list
@@ -454,7 +483,7 @@
       (rep))))  ; tail-recursive, so stack doesn't grow.
 
 (define eval-one-exp
-  (lambda (x) (top-level-eval (syntax-expand (parse-exp x)))))
+  (lambda (x) (top-level-eval (parse-exp x))))
 
 ; Other Utility Methods
 (define not-pred
