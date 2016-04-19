@@ -303,7 +303,7 @@
             (apply-env env 'and
               (lambda(x) (app-exp (var-exp 'and) body))
               (lambda() (cond
-                  [(null? body) (lit-exp #f)]
+                  [(null? body) (lit-exp #t)]
                   [(null? (cdr body)) (car body)]
                   [else (if-exp #t (car body)
                     (and-exp (cdr body))
@@ -312,7 +312,7 @@
             (apply-env env 'or
               (lambda(x) (app-exp (var-exp 'or) body))
               (lambda() (cond
-                  [(null? body) (lit-exp #t)]
+                  [(null? body) (lit-exp #f)]
                   [(null? (cdr body)) (car body)]
                   [else (let-exp 'let
                       (list (cons 'val (car body)))
