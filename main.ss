@@ -12,20 +12,6 @@
 ;-------------------+
 
 ; parsed expression
- 
-; (define-datatype expression expression?  
-;   [var-exp        ; variable references
-;    (id symbol?)]
-;   [lit-exp        ; "Normal" data.  Did I leave out any types?
-;    (datum
-;     (lambda (x)
-;       (ormap 
-;        (lambda (pred) (pred x))
-;        (list number? vector? boolean? symbol? string? pair? null?))))]
-;   [app-exp        ; applications
-;    (rator expression?)
-;    (rands (list-of expression?))]  
-;   )
 (define (implist-of pred?)
   (lambda(implst)
     (let helper ([ls implst])
@@ -35,7 +21,7 @@
 
 (define-datatype expression expression?
   [var-exp (id symbol?)]
-  [lit-exp        ; "Normal" data.  Did I leave out any types?
+  [lit-exp
        (datum (lambda (x)
           (ormap 
            (lambda (pred) (pred x))
@@ -44,24 +30,45 @@
       (rands (list-of expression?))]
   [lambda-exp (vars (implist-of symbol?))
       (body (list-of expression?))]
+  [set!-exp (var symbol?)
+      (val expression?)]
+  [if-exp
+      (two-armed? boolean?)
+      (test expression?)
+      (then-op expression?)
+      (else-op (or-pred null? expression?))]
   [let-exp (lettype (lambda(x)(or (eq? x 'let)(eq? x 'letrec)(eq? x 'let*)(eq? x 'letrec*))))
       (vars-ls (list-of (lambda(y)(and (symbol? (car y))(expression? (cdr y))))))
       (body (list-of expression?))]
   [let-named-exp (name symbol?)
       (vars-ls (list-of (lambda(y)(and (symbol? (car y))(expression? (cdr y))))))
       (body (list-of expression?))]
-  [if-exp
-      (two-armed? boolean?)
-      (test expression?)
-      (then-op expression?)
-      (else-op (or-pred null? expression?))]
   [quote-exp 
         (datum (lambda (x)
           (ormap 
            (lambda (pred) (pred x))
            (list number? vector? boolean? symbol? string? pair? null?))))]
-  [set!-exp (var symbol?)
-      (val expression?)])
+  [begin-exp (body (list-of expression?))]
+  [and-exp (body (list-of expression?))]
+  [or-exp (body (list-of expression?))]
+  )
+
+; the core expression of scheme. Syntax expansion should convert all code to core scheme.
+(define-datatype cexpression cexpression?
+  [var-cexp (id symbol?)]
+  [lit-cexp
+       (datum (lambda (x)
+          (ormap (lambda (pred) (pred x))
+           (list number? vector? boolean? symbol? string? pair? null?))))]
+  [app-cexp (rator cexpression?)
+      (rands (list-of cexpression?))]
+  [lambda-cexp (vars (implist-of symbol?))
+      (body (list-of cexpression?))]
+  [if-cexp (test cexpression?)
+      (then-op cexpression?)
+      (else-op cexpression?)]
+  [set!-cexp (var symbol?)
+      (val cexpression?)])
 
 ;; environment type definitions
 (define-datatype environment environment?
@@ -78,7 +85,7 @@
   [prim-proc
    (name symbol?)]
   [closure (vars (implist-of symbol?))
-      (body (list-of expression?))
+      (body (list-of cexpression?))
       (env environment?)])
    
 	
@@ -98,20 +105,6 @@
 (define 1st car)
 (define 2nd cadr)
 (define 3rd caddr)
-
-; (define parse-exp         
-;   (lambda (datum)
-;     (cond
-;      [(symbol? datum) (var-exp datum)]
-;      [(number? datum) (lit-exp datum)]
-;      [(string? datum) (lit-exp datum)]
-;      [(vector? datum) (lit-exp datum)]
-;      [(boolean? datum) (lit-exp datum)]
-;      [(pair? datum)
-;       (cond
-;        [else (app-exp (parse-exp (1st datum))
-; 		      (map parse-exp (cdr datum)))])]
-;      [else (eopl:error 'parse-exp "bad expression: ~s" datum)])))
 
 
 (define parse-exp
@@ -170,6 +163,12 @@
           (if (> (length datum) 3)
             (eopl:error 'parse-exp "set! expression: too many parts: ~s" datum))
           (set!-exp (cadr datum) (parse-exp (caddr datum)))]
+       [(eq? (car datum) 'begin)
+          (begin-exp (map parse-exp (cdr datum)))]
+       [(eq? (car datum) 'and)
+          (and-exp (map parse-exp (cdr datum)))]
+       [(eq? (car datum) 'or)
+          (or-exp (map parse-exp (cdr datum)))]
        [else
           (if (not (list? datum))
             (eopl:error 'parse-exp "Error in parse-exp: application ~s is not a proper list" datum))
@@ -180,6 +179,10 @@
 (define unparse-exp
   (lambda (expr)
     (cases expression expr
+      [var-exp (id)
+          id]
+      [lit-exp (var)
+          var]
       [app-exp (rator rands)
           (cons (unparse-exp rator) (map unparse-exp rands))]
       [lambda-exp (vars body)
@@ -198,10 +201,13 @@
             (map unparse-exp body))]
       [quote-exp (datum)
           (list 'quote datum)]
-      [var-exp (id)
-          id]
-      [lit-exp (var)
-          var])))
+      [begin-exp (body)
+          (cons 'begin (map unparse-exp body))]
+      [and-exp (body)
+          (cons 'and (map unparse-exp body))]
+      [or-exp (body)
+          (cons 'or (map unparse-exp body))]
+          )))
 
 
 ;-------------------+
@@ -210,12 +216,7 @@
 ;                   |
 ;-------------------+
 
-
-
-
-
 ; Environment definitions for CSSE 304 Scheme interpreter.  Based on EoPL section 2.3
-
 (define empty-env
   (lambda ()
     (empty-env-record)))
@@ -262,9 +263,66 @@
 
 
 ; To be added later
-
-
-
+(define syntax-expand
+  (lambda (exp env)
+    (let* ([curlev-expand (lambda (exp) (syntax-expand exp env))]
+      [expand (cases expression exp
+          [lit-exp (datum) (lit-cexp datum)]
+          [quote-exp (datum) (lit-cexp datum)]
+          [var-exp (id) (var-cexp id)]
+          [if-exp (two-armed? test then-op else-op)
+            (if-cexp (curlev-expand test)
+              (curlev-expand then-op) 
+              (if two-armed? (curlev-expand else-op) (lit-cexp (void))))]
+          [lambda-exp (vars body)
+            (let* ([bonded (if (list? vars) vars (implst->list vars))]
+              [nextlev-expand (lambda (exp) 
+                (syntax-expand exp (extend-env bonded bonded env)))])
+              (lambda-cexp vars (map nextlev-expand body)))]
+          [app-exp (rator rands)
+            (app-cexp (curlev-expand rator) (map curlev-expand rands))]
+          ; states above are base cases where expression is part of core expresion
+          
+          [let-exp (lettype vars-ls body)
+            (case lettype
+              [(let) 
+                (app-exp (lambda-exp (map car vars-ls) body)
+                  (map cdr vars-ls))]
+              [(let*)  
+                (if (null? vars-ls) ; This is will create an extra let with null vars-ls
+                  (let-exp 'let vars-ls body)
+                  (let-exp 'let (list (car vars-ls))
+                    (list (let-exp 'let* (cdr vars-ls) body))))]
+              [(letrec) (eopl:error 'eval-exp "Not implemented")]
+              [(letrec*) (eopl:error 'eval-exp "Not implemented")])]
+          [begin-exp (body)
+            (apply-env env 'begin
+              (lambda(x) (app-exp (var-exp 'begin) body))
+              (lambda() (app-exp (lambda-exp '() body) '())))]
+          [and-exp (body)
+            (apply-env env 'and
+              (lambda(x) (app-exp (var-exp 'and) body))
+              (lambda() (cond
+                  [(null? body) (lit-exp #f)]
+                  [(null? (cdr body)) (car body)]
+                  [else (if-exp #t (car body)
+                    (and-exp (cdr body))
+                    (lit-exp #f))])))]
+          [or-exp (body)
+            (apply-env env 'or
+              (lambda(x) (app-exp (var-exp 'or) body))
+              (lambda() (cond
+                  [(null? body) (lit-exp #t)]
+                  [(null? (cdr body)) (car body)]
+                  [else (let-exp 'let
+                      (list (cons 'val (car body)))
+                      (list (if-exp #t (var-exp 'val) (var-exp 'val) 
+                          (or-exp (cdr body)))))])))]
+          [else (eopl:error 'syntax-expand "Bad abstract syntax: ~a" exp)])])
+      (if (cexpression? expand)
+        expand
+        (curlev-expand expand))
+    )))
 
 
 
@@ -273,7 +331,7 @@
 
 ;-------------------+
 ;                   |
-;   INTERPRETER    |
+;   INTERPRETER     |
 ;                   |
 ;-------------------+
 
@@ -284,16 +342,15 @@
 (define top-level-eval
   (lambda (form)
     ; later we may add things that are not expressions.
-    (eval-exp form (empty-env))))
+    (eval-exp (syntax-expand form (empty-env)) (empty-env))))
 
 ; eval-exp is the main component of the interpreter
 
 (define eval-exp
   (lambda (exp env)
-    (cases expression exp
-      [lit-exp (datum) datum]
-      [quote-exp (datum) datum]
-      [var-exp (id)
+    (cases cexpression exp
+      [lit-cexp (datum) datum]
+      [var-cexp (id)
 				(apply-env env id; look up its value.
       	   (lambda (x) x) ; procedure to call if id is in the environment 
            (lambda ()
@@ -301,59 +358,16 @@
                 (lambda (x) x)
                 (lambda () (eopl:error 'apply-env ; procedure to call if id not in env
                   "variable not found in environment: ~s" id)))))]
-      [if-exp (two-armed? test then-op else-op)
+      [if-cexp (test then-op else-op)
         (if (eval-exp test env)
           (eval-exp then-op env)
-          (if two-armed? (eval-exp else-op env)))]
-      [lambda-exp (vars body)
+          (eval-exp else-op env))]
+      [lambda-cexp (vars body)
         (closure vars body env)]
-      
-      [let-exp (lettype vars-ls body)
-        (eval-exp (case lettype
-          [(let) 
-            (app-exp (lambda-exp (map car vars-ls) body)
-              (map cdr vars-ls))]
-          [(let*)  
-            (if (null? vars-ls) ; This is will create an extra let with null vars-ls
-              (let-exp 'let vars-ls body)
-              (let-exp 'let (list (car vars-ls))
-                (list (let-exp 'let* (cdr vars-ls) body))))]
-          [(letrec) (eopl:error 'eval-exp "Not implemented")]
-          [(letrec*) (eopl:error 'eval-exp "Not implemented")])
-        env)]
-
-      [app-exp (rator rands)
-        (cases expression rator
-          [var-exp (sym)
-            (case sym
-              [(begin)
-                (eval-exp (app-exp (lambda-exp '() rands) '()) env)]
-              [(and)
-                (eval-exp 
-                  (cond
-                    [(null? rands) (lit-exp #f)]
-                    [(null? (cdr rands)) (car rands)]
-                    [else (if-exp #t (car rands)
-                      (app-exp (var-exp 'and) (cdr rands))
-                      (lit-exp #f))])
-                env)]
-              [(or)
-                (eval-exp 
-                  (cond
-                    [(null? rands) (lit-exp #t)]
-                    [(null? (cdr rands)) (car rands)]
-                    [else (let-exp 'let
-                        (list (cons 'val (car rands)))
-                        (list (if-exp #t (var-exp 'val) (var-exp 'val) 
-                            (app-exp (var-exp 'or) (cdr rands)))))])
-                env)]
-              [else (let ([proc-value (eval-exp rator env)]
-                  [args (map (lambda(x) (eval-exp x env)) rands)])
-                (apply-proc proc-value args))])]
-
-          [else (let ([proc-value (eval-exp rator env)]
-                  [args (map (lambda(x) (eval-exp x env)) rands)])
-              (apply-proc proc-value args))])]
+      [app-cexp (rator rands)
+        (let ([proc-value (eval-exp rator env)]
+              [args (map (lambda(x) (eval-exp x env)) rands)])
+          (apply-proc proc-value args))]
       [else (eopl:error 'eval-exp "Bad abstract syntax: ~a" exp)])))
 
 ; evaluate the list of operands, putting results into a list
@@ -377,11 +391,7 @@
               (if (= (length vars)(length args))
                 (extend-env vars args env)
                 (eopl:error 'apply-proc "incorrect number of argument: closure ~a ~a" proc-value args))
-              (extend-env
-                (let loop ([vars vars]) ; convert improper list to a list
-                  (if (pair? vars)
-                    (cons (car vars) (loop (cdr vars)))
-                    (list vars)))
+              (extend-env (implst->list vars)
                 (let loop ([vars vars][args args]) ; match all parts of args to vars
                   (if (pair? vars)
                     (if (pair? args)
@@ -501,4 +511,9 @@
     (lambda (obj)
       (or (preda obj) (predb obj)))))
 
-
+(define implst->list
+  (letrec ([loop (lambda (vars)
+    (if (pair? vars)
+        (cons (car vars) (loop (cdr vars)))
+        (list vars)))])
+  loop))
