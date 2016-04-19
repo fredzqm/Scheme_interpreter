@@ -296,8 +296,8 @@
             (if (null? (cdr vars-ls)) (let-exp 'let vars-ls body)
               (let-exp 'let (list (car vars-ls))
                 (list (let-exp 'let* (cdr vars-ls) body)))))]
-          [(letrec) (eopl:error 'syntax-expand "Fred is STUPID!!!!!!!")]
-          [(letrec*) (eopl:error 'syntax-expand "Fred is STUUUUUPIIIIID!!!!!!!!!!!!!")])]
+          [(letrec) (eopl:error 'syntax-expand "Not implemented")]
+          [(letrec*) (eopl:error 'syntax-expand "Not implemented")])]
       [else exp])))
 
 ; eval-exp is the main component of the interpreter
