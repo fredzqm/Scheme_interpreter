@@ -286,6 +286,20 @@
     ; later we may add things that are not expressions.
     (eval-exp form (empty-env))))
 
+(define syntax-expand
+  (lambda (exp)
+    (cases expression exp
+      [let-exp (lettype vars-ls body)
+        (case lettype
+          [(let) (app-exp (lambda-exp (map car vars-ls) (map syntax-expand body)) (map cdr vars-ls))]
+          [(let*) (syntax-expand 
+            (if (null? (cdr vars-ls)) (let-exp 'let vars-ls body)
+              (let-exp 'let (list (car vars-ls))
+                (list (let-exp 'let* (cdr vars-ls) body)))))]
+          [(letrec) (eopl:error 'syntax-expand "Fred is STUPID!!!!!!!")]
+          [(letrec*) (eopl:error 'syntax-expand "Fred is STUUUUUPIIIIID!!!!!!!!!!!!!")])]
+      [else exp])))
+
 ; eval-exp is the main component of the interpreter
 
 (define eval-exp
@@ -307,12 +321,6 @@
           (if two-armed? (eval-exp else-op env)))]
       [lambda-exp (vars body)
         (closure vars body env)]
-      [let-exp (lettype vars-ls body)
-        (case lettype
-          [(let) (eval-exp (app-exp
-              (lambda-exp (map car vars-ls) body)
-              (map cdr vars-ls)) env)]
-        [else eopl:error 'eval-exp "Bad type of let expression"])]
       [app-exp (rator rands)
         (let ([proc-value (eval-exp rator env)]
               [args (map (lambda(x) (eval-exp x env)) rands)])
@@ -446,7 +454,7 @@
       (rep))))  ; tail-recursive, so stack doesn't grow.
 
 (define eval-one-exp
-  (lambda (x) (top-level-eval (parse-exp x))))
+  (lambda (x) (top-level-eval (syntax-expand (parse-exp x)))))
 
 ; Other Utility Methods
 (define not-pred
