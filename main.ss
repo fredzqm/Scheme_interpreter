@@ -28,6 +28,8 @@
            (list number? vector? boolean? symbol? string? pair? null?))))]
   [app-exp (rator expression?)
       (rands (list-of expression?))]
+  [app-sym-exp (ratorSym symbol?)
+      (rands (list-of expression?))]
   [lambda-exp (vars (implist-of symbol?))
       (body (list-of expression?))]
   [set!-exp (var symbol?)
@@ -88,7 +90,8 @@
       (body (list-of cexpression?))
       (env environment?)])
    
-	
+
+
 
 ;-------------------+
 ;                   |
@@ -172,7 +175,9 @@
        [else
           (if (not (list? datum))
             (eopl:error 'parse-exp "Error in parse-exp: application ~s is not a proper list" datum))
-          (app-exp (parse-exp (car datum)) (map parse-exp (cdr datum)))])]
+          (if (symbol? (car datum))
+            (app-sym-exp (car datum) (map parse-exp (cdr datum)))
+            (app-exp (parse-exp (car datum)) (map parse-exp (cdr datum))))])]
      [else (eopl:error 'parse-exp "bad expression: ~s" datum)])))
 
 
@@ -185,6 +190,8 @@
           var]
       [app-exp (rator rands)
           (cons (unparse-exp rator) (map unparse-exp rands))]
+      [app-sym-exp (ratorSym rands)
+          (cons ratorSym (map unparse-exp rands))]
       [lambda-exp (vars body)
           (cons* 'lambda vars (map unparse-exp body))]
       [if-exp (two-armed? test then-op else-op)
@@ -261,6 +268,12 @@
 ;-----------------------+
 
 
+; To be added with define-syntax
+(define global-syntax-env (extend-env 
+  '(let)
+  (list (primitive let))
+  (empty-env)))
+
 
 ; To be added later
 (define syntax-expand
@@ -276,12 +289,17 @@
               (if two-armed? (curlev-expand else-op) (lit-cexp (void))))]
           [lambda-exp (vars body)
             (let* ([bonded (if (list? vars) vars (implst->list vars))]
-              [nextlev-expand (lambda (exp) 
-                (syntax-expand exp (extend-env bonded bonded env)))])
-              (lambda-cexp vars (map nextlev-expand body)))]
+              [nextlev-expand (lambda (exp) (syntax-expand exp (extend-env bonded bonded env)))])
+                (lambda-cexp vars (map nextlev-expand body)))]
           [app-exp (rator rands)
             (app-cexp (curlev-expand rator) (map curlev-expand rands))]
-          ; states above are base cases where expression is part of core expresion
+          [app-sym-exp (ratorSym rands)
+            (apply-env env ratorSym
+              (lambda(x) (app-cexp (var-cexp ratorSym) (map curlev-expand rands))) ; occur binded
+              (apply-env global-sytax-env ratorSym ; occur free
+                (lambda(x) (apply-syntax x (unparse-exp rands))) ; does proper syntax exapnsion
+                (lambda() (app-cexp (var-cexp ratorSym) (map curlev-expand rands)))))] ; occur free, should bined globally
+          ; cases above are base cases where expression is part of core expresion
           
           [let-exp (lettype vars-ls body)
             (case lettype
