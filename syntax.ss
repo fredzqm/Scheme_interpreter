@@ -11,58 +11,7 @@
   [primitiveSyntax (sym symbol?)]
   )
 
-; Zero error-checking for now
-(define apply-syntax
-  (lambda (syntax body env)
-    (let ([curlev-parse (lambda (exp) (parse-exp exp env))])
-      (cases syntaxType syntax
-        [patternSyntax (syntaxList)
-            (or (ormap (lambda(x) (matchRule (car x) (cdr x) body)) syntax)
-              (eopl:error 'apply-syntax "Attempt to apply bad syntax: ~s" syntax))]
-        [coreSyntax (sym)
-          (case sym
-            [(quote) (apply lit-cexp body)]
-            [(lambda)
-              (lambda-cexp (car body) (map curlev-parse (cdr body)))]
-            [(if)
-              (if-cexp
-                (curlev-parse (car body))
-                (curlev-parse (cadr body))
-                (if (null? (cddr body))
-                    (lit-cexp (void))
-                    (curlev-parse (caddr body))))])]
-        [primitiveSyntax (sym)
-          (curlev-parse
-            (case sym
-              [(let) 
-                (cons (cons* 'lambda (map car (car body)) (cdr body))
-                  (map cadr (car body)))]
-              [(let*)
-                (if (or (null? (cdar body)) (null? (car body)))
-                    (cons 'let body)
-                    (list 'let (list (caar body))
-                          (cons* 'let* (cdar body) (cdr body))))]
-              [(letrec) (eopl:error 'eval-exp "Not implemented")]
-              [(letrec*) (eopl:error 'eval-exp "Not implemented")]
-              [(begin)
-                (cons* 'lambda '() body)]
-              [(and)
-                (cond
-                  [(null? body) (lit-exp #t)]
-                  [(null? (cdr body)) (car body)]
-                  [else (if-exp #t (car body)
-                          (and-exp (cdr body))
-                          (lit-exp #f))])]
-              [(or)
-                (cond
-                  [(null? body) (lit-exp #f)]
-                  [(null? (cdr body)) (car body)]
-                  [else (let-exp 'let
-                    (list (cons 'val (car body)))
-                    (list (if-exp #t (var-exp 'val) (var-exp 'val) 
-                    (or-exp (cdr body)))))])])
-            )
-          ]))))
+
 
 (define matchRule
   (lambda (pattern result body)
