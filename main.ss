@@ -196,7 +196,7 @@
             (if (symbol? (car datum))
               (let ([ratorSym (car datum)])
                 (apply-env env (car datum)
-                  (lambda (x) (app-cexp (var-cexp ratorSym) (cdr datum))) ; occur bounded
+                  (lambda (x) (app-cexp (var-cexp ratorSym) (map curlev-parse (cdr datum)))) ; occur bounded
                   (lambda () (apply-env global-syntax-env (car datum) ; occur free
                               (lambda(x) (apply-syntax x (cdr datum) env)) ; does proper syntax exapnsion
                               (lambda() (app-cexp (var-cexp ratorSym) (map (lambda (d) (parse-exp d env)) (cdr datum))))))))
@@ -457,8 +457,8 @@
                    "Attempt to apply bad procedure: ~s" 
                     proc-value)])))
   
-(define *prim-proc-names* '(apply + - * / add1 sub1 zero? not = < > <= >= cons list null? assq eq? equal?
-                            atom? car caar caaar caadr cadar cdaar caddr cdadr cddar cdddr cadr
+(define *prim-proc-names* '(apply map + - * / add1 sub1 zero? not = < > <= >= cons list null? assq eq?
+                            equal? atom? car caar caaar caadr cadar cdaar caddr cdadr cddar cdddr cadr
                             cdar cddr cdr length list->vector list? pair? procedure? vector->list
                             vector make-vector vector-ref vector? number? symbol? set-car! set-cdr!
                             vector-set! display newline void))
@@ -476,7 +476,19 @@
 (define apply-prim-proc
   (lambda (prim-proc args)
     (case prim-proc
-      [(apply) (apply-proc (car args) (cdr args))]
+      [(apply) (apply-proc (car args)
+                  (let loop ([arg-ls (cdr args)]) ; Caution: No error-checking for 0 args
+                    (if (null? (cdr arg-ls))
+                      (car arg-ls)
+                      (cons (car arg-ls) (loop (cdr arg-ls))))))]
+      [(map) (let ([proc (car args)]
+                    [arg-ls (cadr args)])
+                  (if (null? arg-ls) ; Caution: No error-checking for 0 args
+                      '()
+                      (cons (apply-proc proc (list (car arg-ls))) (apply-prim-proc 'map (list proc (cdr arg-ls))))))]
+      ; (if (null? (cdr args))
+      ;             '()
+      ;             (cons (apply-proc (car args) (cadr args)) (apply-prim-proc prim-proc (cons (car args) (cddr args)))))]
       [(+) (apply + args)]
       [(-) (apply - args)]
       [(*) (apply * args)]
