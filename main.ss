@@ -67,7 +67,8 @@
       (rands (list-of cexpression?))]
   [lambda-cexp (vars (implist-of symbol?))
       (body (list-of cexpression?))]
-  [if-cexp (test cexpression?)
+  [if-cexp
+      (test cexpression?)
       (then-op cexpression?)
       (else-op cexpression?)]
   [set!-cexp (var symbol?)
@@ -293,7 +294,7 @@
 ;   SYNTAX EXPANSION    |
 ;                       |
 ;-----------------------+
-(define *prim-syntax-names* '(lambda let let* letrec letrec* begin and or))
+(define *prim-syntax-names* '(lambda if let let* letrec letrec* begin and or))
 
 ; To be added with define-syntax
 (define global-syntax-env (extend-env 
@@ -460,7 +461,7 @@
                             atom? car caar caaar caadr cadar cdaar caddr cdadr cddar cdddr cadr
                             cdar cddr cdr length list->vector list? pair? procedure? vector->list
                             vector make-vector vector-ref vector? number? symbol? set-car! set-cdr!
-                            vector-set! display newline))
+                            vector-set! display newline void))
 
 (define global-env         ; for now, our initial global environment only contains 
   (extend-env            ; procedure names.  Recall that an environment associates
@@ -527,6 +528,7 @@
       [(vector-set!) (apply vector-set! args)]
       [(display) (apply display args)]
       [(newline) (apply newline args)]
+      [(void) (apply void args)]
       [else (error 'apply-prim-proc 
             "Bad primitive procedure name: ~s" 
             prim-proc)])))

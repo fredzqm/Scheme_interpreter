@@ -22,6 +22,13 @@
             [(lambda)
               (lambda-cexp (car body) (map curlev-parse (cdr body)))
               ]
+            [(if)
+              (if-cexp
+                (curlev-parse (car body))
+                (curlev-parse (cadr body))
+                (if (null? (cddr body))
+                    (app-cexp (var-cexp 'void) '())
+                    (curlev-parse (cadr body))))]
             [(let) 
               (app-cexp (lambda-cexp (map car (car body)) (map curlev-parse (cdr body)))
                 (map (lambda (p) (parse-exp (cadr p) env)) (car body)))]
