@@ -4,6 +4,7 @@
 ;; Easier to submit to server, probably harder to use in the development process
 
 (load "chez-init.ss") 
+(load "syntax.ss")
 
 ;-------------------+
 ;                   |
@@ -266,14 +267,13 @@
 ;   SYNTAX EXPANSION    |
 ;                       |
 ;-----------------------+
-
+(define *prim-syntax-names* '(let let* letrec letrec* begin and or))
 
 ; To be added with define-syntax
 (define global-syntax-env (extend-env 
-  '(let)
-  (list (primitive let))
+  *prim-syntax-names*
+  (map primitiveSyntax *prim-syntax-names*)
   (empty-env)))
-
 
 ; To be added later
 (define syntax-expand
@@ -295,47 +295,51 @@
             (app-cexp (curlev-expand rator) (map curlev-expand rands))]
           [app-sym-exp (ratorSym rands)
             (apply-env env ratorSym
-              (lambda(x) (app-cexp (var-cexp ratorSym) (map curlev-expand rands))) ; occur binded
-              (apply-env global-sytax-env ratorSym ; occur free
-                (lambda(x) (apply-syntax x (unparse-exp rands))) ; does proper syntax exapnsion
-                (lambda() (app-cexp (var-cexp ratorSym) (map curlev-expand rands)))))] ; occur free, should bined globally
+              (lambda (x) (app-cexp (var-cexp ratorSym) (map curlev-expand rands))) ; occur bounded
+              (lambda () (apply-env global-syntax-env ratorSym ; occur free
+                          (lambda(x) (apply-syntax x (map unparse-exp rands))) ; does proper syntax exapnsion
+                          (lambda() (app-cexp (var-cexp ratorSym) (map curlev-expand rands))))))] ; occur free, should bined globally
           ; cases above are base cases where expression is part of core expresion
           
           [let-exp (lettype vars-ls body)
-            (case lettype
-              [(let) 
-                (app-exp (lambda-exp (map car vars-ls) body)
-                  (map cdr vars-ls))]
-              [(let*)  
-                (if (null? vars-ls) ; This is will create an extra let with null vars-ls
-                  (let-exp 'let vars-ls body)
-                  (let-exp 'let (list (car vars-ls))
-                    (list (let-exp 'let* (cdr vars-ls) body))))]
-              [(letrec) (eopl:error 'eval-exp "Not implemented")]
-              [(letrec*) (eopl:error 'eval-exp "Not implemented")])]
+            (app-sym-exp lettype (cons (parse-exp (map (lambda (p) (list (car p) (unparse-exp (cdr p)))) vars-ls)) body))]
+            ; (case lettype
+            ;   [(let) 
+            ;     (app-exp (lambda-exp (map car vars-ls) body)
+            ;       (map cdr vars-ls))]
+            ;   [(let*)  
+            ;     (if (null? vars-ls) ; This is will create an extra let with null vars-ls
+            ;       (let-exp 'let vars-ls body)
+            ;       (let-exp 'let (list (car vars-ls))
+            ;         (list (let-exp 'let* (cdr vars-ls) body))))]
+            ;   [(letrec) (eopl:error 'eval-exp "Not implemented")]
+            ;   [(letrec*) (eopl:error 'eval-exp "Not implemented")])]
           [begin-exp (body)
-            (apply-env env 'begin
-              (lambda(x) (app-exp (var-exp 'begin) body))
-              (lambda() (app-exp (lambda-exp '() body) '())))]
+            (app-sym-exp 'begin body)]
+            ; (apply-env env 'begin
+            ;   (lambda(x) (app-exp (var-exp 'begin) body))
+            ;   (lambda() (app-exp (lambda-exp '() body) '())))]
           [and-exp (body)
-            (apply-env env 'and
-              (lambda(x) (app-exp (var-exp 'and) body))
-              (lambda() (cond
-                  [(null? body) (lit-exp #t)]
-                  [(null? (cdr body)) (car body)]
-                  [else (if-exp #t (car body)
-                    (and-exp (cdr body))
-                    (lit-exp #f))])))]
+            (app-sym-exp 'and body)]
+            ; (apply-env env 'and
+            ;   (lambda(x) (app-exp (var-exp 'and) body))
+            ;   (lambda() (cond
+            ;       [(null? body) (lit-exp #t)]
+            ;       [(null? (cdr body)) (car body)]
+            ;       [else (if-exp #t (car body)
+            ;         (and-exp (cdr body))
+            ;         (lit-exp #f))])))]
           [or-exp (body)
-            (apply-env env 'or
-              (lambda(x) (app-exp (var-exp 'or) body))
-              (lambda() (cond
-                  [(null? body) (lit-exp #f)]
-                  [(null? (cdr body)) (car body)]
-                  [else (let-exp 'let
-                      (list (cons 'val (car body)))
-                      (list (if-exp #t (var-exp 'val) (var-exp 'val) 
-                          (or-exp (cdr body)))))])))]
+            (app-sym-exp 'or body)]
+            ; (apply-env env 'or
+            ;   (lambda(x) (app-exp (var-exp 'or) body))
+            ;   (lambda() (cond
+            ;       [(null? body) (lit-exp #f)]
+            ;       [(null? (cdr body)) (car body)]
+            ;       [else (let-exp 'let
+            ;           (list (cons 'val (car body)))
+            ;           (list (if-exp #t (var-exp 'val) (var-exp 'val) 
+            ;               (or-exp (cdr body)))))])))]
           [else (eopl:error 'syntax-expand "Bad abstract syntax: ~a" exp)])])
       (if (cexpression? expand)
         expand
@@ -369,7 +373,7 @@
     (cases cexpression exp
       [lit-cexp (datum) datum]
       [var-cexp (id)
-				(apply-env env id; look up its value.
+				(apply-env env id ; look up its value.
       	   (lambda (x) x) ; procedure to call if id is in the environment 
            (lambda ()
              (apply-env global-env id
