@@ -9,7 +9,7 @@
   [patternSyntax (syntaxList (list-of (lambda(x)(and (syntax-pattern? (car x))(syntax-pattern? (cdr x))))))]
   [primitiveSyntax (sym symbol?)])
 
-
+; Zero error-checking for now
 (define apply-syntax
   (lambda (syntax body env)
     (let ([curlev-parse (lambda (exp) (parse-exp exp env))])
@@ -19,6 +19,7 @@
               (eopl:error 'apply-syntax "Attempt to apply bad syntax: ~s" syntax))]
         [primitiveSyntax (sym)
           (case sym
+            [(quote) (apply lit-cexp body)]
             [(lambda)
               (lambda-cexp (car body) (map curlev-parse (cdr body)))
               ]
@@ -28,7 +29,7 @@
                 (curlev-parse (cadr body))
                 (if (null? (cddr body))
                     (app-cexp (var-cexp 'void) '())
-                    (curlev-parse (cadr body))))]
+                    (curlev-parse (caddr body))))]
             [(let) 
               (app-cexp (lambda-cexp (map car (car body)) (map curlev-parse (cdr body)))
                 (map (lambda (p) (parse-exp (cadr p) env)) (car body)))]

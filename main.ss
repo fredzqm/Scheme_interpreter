@@ -294,7 +294,7 @@
 ;   SYNTAX EXPANSION    |
 ;                       |
 ;-----------------------+
-(define *prim-syntax-names* '(lambda if let let* letrec letrec* begin and or))
+(define *prim-syntax-names* '(quote lambda if let let* letrec letrec* begin and or))
 
 ; To be added with define-syntax
 (define global-syntax-env (extend-env 
