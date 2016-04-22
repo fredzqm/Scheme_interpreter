@@ -26,11 +26,15 @@
               (app-cexp (lambda-cexp (map car (car body)) (map curlev-parse (cdr body)))
                 (map (lambda (p) (parse-exp (cadr p) env)) (car body)))]
             [(let*)
-              (let ([vars-ls (map (lambda (p) (cons (car p) (parse-exp (cadr p) env))) (car body))])
-                (if (null? vars-ls) ; This is will create an extra let with null vars-ls
-                  (let-exp 'let vars-ls (map curlev-parse (cdr body)))
-                  (let-exp 'let (list (car vars-ls))
-                    (list (let-exp 'let* (cdr vars-ls) (map curlev-parse (cdr body)))))))]
+              (if (or (null? (cdar body)) (null? (car body)))
+                  (cons 'let body)
+                  (list 'let (list (caar body))
+                        (cons* 'let* (cdar body) (cdr body))))]
+              ; (let ([vars-ls (map (lambda (p) (cons (car p) (parse-exp (cadr p) env))) (car body))])
+              ;   (if (null? vars-ls) ; This is will create an extra let with null vars-ls
+              ;     (let-exp 'let vars-ls (map curlev-parse (cdr body)))
+              ;     (let-exp 'let (list (car vars-ls))
+              ;       (list (let-exp 'let* (cdr vars-ls) (map curlev-parse (cdr body)))))))]
             [(letrec) (eopl:error 'eval-exp "Not implemented")]
             [(letrec*) (eopl:error 'eval-exp "Not implemented")]
             [(begin)
