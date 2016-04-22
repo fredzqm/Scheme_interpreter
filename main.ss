@@ -294,13 +294,18 @@
 ;   SYNTAX EXPANSION    |
 ;                       |
 ;-----------------------+
-(define *prim-syntax-names* '(quote lambda if let let* letrec letrec* begin and or))
+(define *core-syntax-names* '(quote lambda if))
+(define *prim-syntax-names* '(let let* letrec letrec* begin and or))
 
 ; To be added with define-syntax
-(define global-syntax-env (extend-env 
-  *prim-syntax-names*
-  (map primitiveSyntax *prim-syntax-names*)
-  (empty-env)))
+(define global-syntax-env 
+  (extend-env 
+    *prim-syntax-names*
+    (map primitiveSyntax *prim-syntax-names*)
+    (extend-env
+      *core-syntax-names*
+      (map coreSyntax *core-syntax-names*) 
+      (empty-env))))
 
 ; To be added later
 ; (define syntax-expand
