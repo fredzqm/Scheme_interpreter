@@ -111,75 +111,101 @@
 (define 3rd caddr)
 
 
+; (define parse-exp
+;   (lambda (datum)
+;     (cond
+;      [(symbol? datum) (var-exp datum)]
+;      [(number? datum) (lit-exp datum)]
+;      [(vector? datum) (lit-exp datum)]
+;      [(boolean? datum) (lit-exp datum)]
+;      [(string? datum) (lit-exp datum)]
+;      [(null? datum) (lit-exp datum)]
+;      [(pair? datum)
+;       (cond
+;        [(eqv? 'quote (1st datum))
+; 	      (if (not (null? (cddr datum)))
+; 	        (eopl:error 'parse-exp "quote expression: incorrect length: ~s" datum))
+; 	      (quote-exp (2nd datum))]
+;        [(eq? (car datum) 'lambda)
+;           (if (null? (cddr datum))
+;             (eopl:error 'parse-exp "lambda expression: incorrect length: ~s" datum))
+;           (if (not ((implist-of symbol?) (cadr datum)))
+;             (eopl:error 'parse-exp "lambda declaration list: formers must be symbols ~s" (cadr datum)))
+;           (lambda-exp (cadr datum) (map parse-exp (cddr datum)))]
+;        [(or (eq? (car datum) 'letrec) (eq? (car datum) 'let) (eq? (car datum) 'let*))
+;           (if (null? (cdr datum))
+;         (eopl:error 'parse-exp "~s expression: incorrect length: ~s" (car datum) datum))
+;           (let ([letarg (cadr datum)] [letop (cddr datum)])
+;             (if (not (list? (cadr datum)))
+;               (begin (set! letarg (caddr datum))
+;                 (set! letop (cdddr datum))))
+;           (if (null? letop)
+;               (eopl:error 'parse-exp "~s expression: incorrect length: ~s" (car datum) letop))
+;             (if (not (list? letarg))
+;               (eopl:error 'parse-exp "~s declaration list: not a proper list: ~s" (car datum) letarg))
+;             (set! letarg (map (lambda(x) 
+;                     (if (not (list? x))
+;                       (eopl:error 'parse-exp "~s declaration pairs: not all proper list: ~s" (car datum) letarg))
+;                 (if (not (symbol? (car x)))
+;                       (eopl:error 'parse-exp "~s declaration pairs: first members must be symbols: ~s" (car datum) letarg))
+;                 (if (not (= (length x) 2))
+;                       (eopl:error 'parse-exp "~s declaration pairs: not all length 2: ~s" (car datum) letarg))
+;                   (cons (car x)(parse-exp (cadr x)))) (cadr datum)))
+;             (set! letop (map parse-exp (cddr datum)))
+;             (if (list? (cadr datum))
+;           (let-exp (car datum) letarg letop)
+;               (let-named-exp (cadr datum) letarg letop)))]
+;        [(eq? (car datum) 'if)
+;           (cond
+;             [(= (length datum) 4) (if-exp #t (parse-exp (cadr datum)) (parse-exp (caddr datum)) (parse-exp (cadddr datum)))]
+;             [(= (length datum) 3) (if-exp #f (parse-exp (cadr datum)) (parse-exp (caddr datum)) '())]
+;             [(= (length datum) 2) (eopl:error 'parse-exp "if expression: should have at least test and then clauses: ~s" datum)]
+;             [else (eopl:error 'parse-exp "if expression: should have only test, then, and (optional) else clauses: ~s" datum)])]
+;        [(eq? (car datum) 'set!)
+;           (if (null? (cddr datum))
+;             (eopl:error 'parse-exp "set! expression: missing expression: ~s" datum))
+;           (if (> (length datum) 3)
+;             (eopl:error 'parse-exp "set! expression: too many parts: ~s" datum))
+;           (set!-exp (cadr datum) (parse-exp (caddr datum)))]
+;        [(eq? (car datum) 'begin)
+;           (begin-exp (map parse-exp (cdr datum)))]
+;        [(eq? (car datum) 'and)
+;           (and-exp (map parse-exp (cdr datum)))]
+;        [(eq? (car datum) 'or)
+;           (or-exp (map parse-exp (cdr datum)))]
+;        [else
+;           (if (not (list? datum))
+;             (eopl:error 'parse-exp "Error in parse-exp: application ~s is not a proper list" datum))
+;           (if (symbol? (car datum))
+;             (app-sym-exp (car datum) (map parse-exp (cdr datum)))
+;             (app-exp (parse-exp (car datum)) (map parse-exp (cdr datum))))])]
+;      [else (eopl:error 'parse-exp "bad expression: ~s" datum)])))
 (define parse-exp
-  (lambda (datum)
-    (cond
-     [(symbol? datum) (var-exp datum)]
-     [(number? datum) (lit-exp datum)]
-     [(vector? datum) (lit-exp datum)]
-     [(boolean? datum) (lit-exp datum)]
-     [(string? datum) (lit-exp datum)]
-     [(null? datum) (lit-exp datum)]
-     [(pair? datum)
-      (cond
-       [(eqv? 'quote (1st datum))
-	      (if (not (null? (cddr datum)))
-	        (eopl:error 'parse-exp "quote expression: incorrect length: ~s" datum))
-	      (quote-exp (2nd datum))]
-       [(eq? (car datum) 'lambda)
-          (if (null? (cddr datum))
-            (eopl:error 'parse-exp "lambda expression: incorrect length: ~s" datum))
-          (if (not ((implist-of symbol?) (cadr datum)))
-            (eopl:error 'parse-exp "lambda declaration list: formers must be symbols ~s" (cadr datum)))
-          (lambda-exp (cadr datum) (map parse-exp (cddr datum)))]
-       [(or (eq? (car datum) 'letrec) (eq? (car datum) 'let) (eq? (car datum) 'let*))
-          (if (null? (cdr datum))
-        (eopl:error 'parse-exp "~s expression: incorrect length: ~s" (car datum) datum))
-          (let ([letarg (cadr datum)] [letop (cddr datum)])
-            (if (not (list? (cadr datum)))
-              (begin (set! letarg (caddr datum))
-                (set! letop (cdddr datum))))
-          (if (null? letop)
-              (eopl:error 'parse-exp "~s expression: incorrect length: ~s" (car datum) letop))
-            (if (not (list? letarg))
-              (eopl:error 'parse-exp "~s declaration list: not a proper list: ~s" (car datum) letarg))
-            (set! letarg (map (lambda(x) 
-                    (if (not (list? x))
-                      (eopl:error 'parse-exp "~s declaration pairs: not all proper list: ~s" (car datum) letarg))
-                (if (not (symbol? (car x)))
-                      (eopl:error 'parse-exp "~s declaration pairs: first members must be symbols: ~s" (car datum) letarg))
-                (if (not (= (length x) 2))
-                      (eopl:error 'parse-exp "~s declaration pairs: not all length 2: ~s" (car datum) letarg))
-                  (cons (car x)(parse-exp (cadr x)))) (cadr datum)))
-            (set! letop (map parse-exp (cddr datum)))
-            (if (list? (cadr datum))
-          (let-exp (car datum) letarg letop)
-              (let-named-exp (cadr datum) letarg letop)))]
-       [(eq? (car datum) 'if)
-          (cond
-            [(= (length datum) 4) (if-exp #t (parse-exp (cadr datum)) (parse-exp (caddr datum)) (parse-exp (cadddr datum)))]
-            [(= (length datum) 3) (if-exp #f (parse-exp (cadr datum)) (parse-exp (caddr datum)) '())]
-            [(= (length datum) 2) (eopl:error 'parse-exp "if expression: should have at least test and then clauses: ~s" datum)]
-            [else (eopl:error 'parse-exp "if expression: should have only test, then, and (optional) else clauses: ~s" datum)])]
-       [(eq? (car datum) 'set!)
-          (if (null? (cddr datum))
-            (eopl:error 'parse-exp "set! expression: missing expression: ~s" datum))
-          (if (> (length datum) 3)
-            (eopl:error 'parse-exp "set! expression: too many parts: ~s" datum))
-          (set!-exp (cadr datum) (parse-exp (caddr datum)))]
-       [(eq? (car datum) 'begin)
-          (begin-exp (map parse-exp (cdr datum)))]
-       [(eq? (car datum) 'and)
-          (and-exp (map parse-exp (cdr datum)))]
-       [(eq? (car datum) 'or)
-          (or-exp (map parse-exp (cdr datum)))]
-       [else
-          (if (not (list? datum))
-            (eopl:error 'parse-exp "Error in parse-exp: application ~s is not a proper list" datum))
-          (if (symbol? (car datum))
-            (app-sym-exp (car datum) (map parse-exp (cdr datum)))
-            (app-exp (parse-exp (car datum)) (map parse-exp (cdr datum))))])]
-     [else (eopl:error 'parse-exp "bad expression: ~s" datum)])))
+  (lambda (datum env)
+     (let* ([curlev-parse (lambda (exp) (parse-exp exp env))]
+            [parsed 
+        (cond
+          [(symbol? datum) (var-cexp datum)]
+          [(number? datum) (lit-cexp datum)]
+          [(vector? datum) (lit-cexp datum)]
+          [(boolean? datum) (lit-cexp datum)]
+          [(string? datum) (lit-cexp datum)]
+          [(null? datum) (lit-cexp datum)]
+          [(pair? datum)
+            (if (symbol? (car datum))
+              (let ([ratorSym (car datum)])
+                (apply-env env (car datum)
+                  (lambda (x) (app-cexp (var-cexp ratorSym) (cdr datum))) ; occur bounded
+                  (lambda () (apply-env global-syntax-env (car datum) ; occur free
+                              (lambda(x) (apply-syntax x (cdr datum) env)) ; does proper syntax exapnsion
+                              (lambda() (app-cexp (var-cexp ratorSym) (map (lambda (d) (parse-exp d env)) (cdr datum))))))))
+              (app-cexp (parse-exp (car datum) env) (map (lambda (d) (parse-exp d env)) (cdr datum))))]
+          [else (eopl:error 'parse-exp "bad expression: ~s" datum)])])
+      (if (cexpression? parsed)
+        parsed
+        (curlev-parse parsed))
+    )))
+
 
 
 (define unparse-exp
@@ -267,7 +293,7 @@
 ;   SYNTAX EXPANSION    |
 ;                       |
 ;-----------------------+
-(define *prim-syntax-names* '(let let* letrec letrec* begin and or))
+(define *prim-syntax-names* '(lambda let let* letrec letrec* begin and or))
 
 ; To be added with define-syntax
 (define global-syntax-env (extend-env 
@@ -276,75 +302,75 @@
   (empty-env)))
 
 ; To be added later
-(define syntax-expand
-  (lambda (exp env)
-    (let* ([curlev-expand (lambda (exp) (syntax-expand exp env))]
-      [expand (cases expression exp
-          [lit-exp (datum) (lit-cexp datum)]
-          [quote-exp (datum) (lit-cexp datum)]
-          [var-exp (id) (var-cexp id)]
-          [if-exp (two-armed? test then-op else-op)
-            (if-cexp (curlev-expand test)
-              (curlev-expand then-op) 
-              (if two-armed? (curlev-expand else-op) (lit-cexp (void))))]
-          [lambda-exp (vars body)
-            (let* ([bonded (if (list? vars) vars (implst->list vars))]
-              [nextlev-expand (lambda (exp) (syntax-expand exp (extend-env bonded bonded env)))])
-                (lambda-cexp vars (map nextlev-expand body)))]
-          [app-exp (rator rands)
-            (app-cexp (curlev-expand rator) (map curlev-expand rands))]
-          [app-sym-exp (ratorSym rands)
-            (apply-env env ratorSym
-              (lambda (x) (app-cexp (var-cexp ratorSym) (map curlev-expand rands))) ; occur bounded
-              (lambda () (apply-env global-syntax-env ratorSym ; occur free
-                          (lambda(x) (apply-syntax x (map unparse-exp rands))) ; does proper syntax exapnsion
-                          (lambda() (app-cexp (var-cexp ratorSym) (map curlev-expand rands))))))] ; occur free, should bined globally
-          ; cases above are base cases where expression is part of core expresion
+; (define syntax-expand
+;   (lambda (exp env)
+;     (let* ([curlev-expand (lambda (exp) (syntax-expand exp env))]
+;       [expand (cases expression exp
+;           [lit-exp (datum) (lit-cexp datum)]
+;           [quote-exp (datum) (lit-cexp datum)]
+;           [var-exp (id) (var-cexp id)]
+;           [if-exp (two-armed? test then-op else-op)
+;             (if-cexp (curlev-expand test)
+;               (curlev-expand then-op) 
+;               (if two-armed? (curlev-expand else-op) (lit-cexp (void))))]
+;           [lambda-exp (vars body)
+;             (let* ([bonded (if (list? vars) vars (implst->list vars))]
+;               [nextlev-expand (lambda (exp) (syntax-expand exp (extend-env bonded bonded env)))])
+;                 (lambda-cexp vars (map nextlev-expand body)))]
+;           [app-exp (rator rands)
+;             (app-cexp (curlev-expand rator) (map curlev-expand rands))]
+;           [app-sym-exp (ratorSym rands)
+;             (apply-env env ratorSym
+;               (lambda (x) (app-cexp (var-cexp ratorSym) (map curlev-expand rands))) ; occur bounded
+;               (lambda () (apply-env global-syntax-env ratorSym ; occur free
+;                           (lambda(x) (apply-syntax x (map unparse-exp rands))) ; does proper syntax exapnsion
+;                           (lambda() (app-cexp (var-cexp ratorSym) (map curlev-expand rands))))))] ; occur free, should bined globally
+;           ; cases above are base cases where expression is part of core expresion
           
-          [let-exp (lettype vars-ls body)
-            (app-sym-exp lettype (cons (parse-exp (map (lambda (p) (list (car p) (unparse-exp (cdr p)))) vars-ls)) body))]
-            ; (case lettype
-            ;   [(let) 
-            ;     (app-exp (lambda-exp (map car vars-ls) body)
-            ;       (map cdr vars-ls))]
-            ;   [(let*)  
-            ;     (if (null? vars-ls) ; This is will create an extra let with null vars-ls
-            ;       (let-exp 'let vars-ls body)
-            ;       (let-exp 'let (list (car vars-ls))
-            ;         (list (let-exp 'let* (cdr vars-ls) body))))]
-            ;   [(letrec) (eopl:error 'eval-exp "Not implemented")]
-            ;   [(letrec*) (eopl:error 'eval-exp "Not implemented")])]
-          [begin-exp (body)
-            (app-sym-exp 'begin body)]
-            ; (apply-env env 'begin
-            ;   (lambda(x) (app-exp (var-exp 'begin) body))
-            ;   (lambda() (app-exp (lambda-exp '() body) '())))]
-          [and-exp (body)
-            (app-sym-exp 'and body)]
-            ; (apply-env env 'and
-            ;   (lambda(x) (app-exp (var-exp 'and) body))
-            ;   (lambda() (cond
-            ;       [(null? body) (lit-exp #t)]
-            ;       [(null? (cdr body)) (car body)]
-            ;       [else (if-exp #t (car body)
-            ;         (and-exp (cdr body))
-            ;         (lit-exp #f))])))]
-          [or-exp (body)
-            (app-sym-exp 'or body)]
-            ; (apply-env env 'or
-            ;   (lambda(x) (app-exp (var-exp 'or) body))
-            ;   (lambda() (cond
-            ;       [(null? body) (lit-exp #f)]
-            ;       [(null? (cdr body)) (car body)]
-            ;       [else (let-exp 'let
-            ;           (list (cons 'val (car body)))
-            ;           (list (if-exp #t (var-exp 'val) (var-exp 'val) 
-            ;               (or-exp (cdr body)))))])))]
-          [else (eopl:error 'syntax-expand "Bad abstract syntax: ~a" exp)])])
-      (if (cexpression? expand)
-        expand
-        (curlev-expand expand))
-    )))
+;           [let-exp (lettype vars-ls body)
+;             (app-sym-exp lettype (cons (parse-exp (map (lambda (p) (list (car p) (unparse-exp (cdr p)))) vars-ls)) body))]
+;             ; (case lettype
+;             ;   [(let) 
+;             ;     (app-exp (lambda-exp (map car vars-ls) body)
+;             ;       (map cdr vars-ls))]
+;             ;   [(let*)  
+;             ;     (if (null? vars-ls) ; This is will create an extra let with null vars-ls
+;             ;       (let-exp 'let vars-ls body)
+;             ;       (let-exp 'let (list (car vars-ls))
+;             ;         (list (let-exp 'let* (cdr vars-ls) body))))]
+;             ;   [(letrec) (eopl:error 'eval-exp "Not implemented")]
+;             ;   [(letrec*) (eopl:error 'eval-exp "Not implemented")])]
+;           [begin-exp (body)
+;             (app-sym-exp 'begin body)]
+;             ; (apply-env env 'begin
+;             ;   (lambda(x) (app-exp (var-exp 'begin) body))
+;             ;   (lambda() (app-exp (lambda-exp '() body) '())))]
+;           [and-exp (body)
+;             (app-sym-exp 'and body)]
+;             ; (apply-env env 'and
+;             ;   (lambda(x) (app-exp (var-exp 'and) body))
+;             ;   (lambda() (cond
+;             ;       [(null? body) (lit-exp #t)]
+;             ;       [(null? (cdr body)) (car body)]
+;             ;       [else (if-exp #t (car body)
+;             ;         (and-exp (cdr body))
+;             ;         (lit-exp #f))])))]
+;           [or-exp (body)
+;             (app-sym-exp 'or body)]
+;             ; (apply-env env 'or
+;             ;   (lambda(x) (app-exp (var-exp 'or) body))
+;             ;   (lambda() (cond
+;             ;       [(null? body) (lit-exp #f)]
+;             ;       [(null? (cdr body)) (car body)]
+;             ;       [else (let-exp 'let
+;             ;           (list (cons 'val (car body)))
+;             ;           (list (if-exp #t (var-exp 'val) (var-exp 'val) 
+;             ;               (or-exp (cdr body)))))])))]
+;           [else (eopl:error 'syntax-expand "Bad abstract syntax: ~a" exp)])])
+;       (if (cexpression? expand)
+;         expand
+;         (curlev-expand expand))
+;     )))
 
 
 
@@ -364,7 +390,7 @@
 (define top-level-eval
   (lambda (form)
     ; later we may add things that are not expressions.
-    (eval-exp (syntax-expand form (empty-env)) (empty-env))))
+    (eval-exp form (empty-env))))
 
 ; eval-exp is the main component of the interpreter
 
@@ -509,13 +535,13 @@
   (lambda ()
     (display "--> ")
     ;; notice that we don't save changes to the environment...
-    (let ([answer (top-level-eval (parse-exp (read)))])
+    (let ([answer (top-level-eval (parse-exp (read) (empty-env)))])
       ;; TODO: are there answers that should display differently?
       (eopl:pretty-print answer) (newline)
       (rep))))  ; tail-recursive, so stack doesn't grow.
 
 (define eval-one-exp
-  (lambda (x) (top-level-eval (parse-exp x))))
+  (lambda (x) (top-level-eval (parse-exp x (empty-env)))))
 
 ; Other Utility Methods
 (define not-pred
