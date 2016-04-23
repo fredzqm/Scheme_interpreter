@@ -13,11 +13,6 @@
 ;-------------------+
 
 ; parsed expression
-(define (implist-of pred?)
-  (lambda(implst)
-    (let helper ([ls implst])
-      (or (null? ls) (pred? ls)
-        (and (pred? (car ls)) (helper (cdr ls)))))))
 
 
 ; (define-datatype expression expression?
@@ -281,6 +276,22 @@
     	      (succeed (list-ref vals pos))
     	      (apply-env env sym succeed fail)))))))
 
+(define change-env!
+  (lambda (env sym val)
+    (cases environment env
+      (empty-env-record () #f)
+      (extended-env-record (syms vals env)
+        (let ((pos (list-find-position sym syms)))
+          (if (number? pos)
+            (list-set-at-index! vals pos val) ; Value is found
+            (cases environment env ; Value is NOT found
+              (extended-env-record (lsyms lvals lenv)
+                (change-env! env sym val))
+              (empty-env-record ()
+                (add-to-end-of-list! syms sym)
+                (add-to-end-of-list! vals val)))
+            ))))))
+
 
 
 
@@ -367,6 +378,9 @@
           (eval-exp else-op env))]
       [lambda-cexp (vars body)
         (closure vars body env)]
+      [set!-cexp (var val)
+        (let ([val (eval-exp val env)])
+          (change-env! env var val))]
       [app-cexp (rator rands)
         (let ([proc-value (eval-exp rator env)]
               [args (map (lambda(x) (eval-exp x env)) rands)])
@@ -531,3 +545,20 @@
         (cons (car vars) (loop (cdr vars)))
         (list vars)))])
   loop))
+
+(define (implist-of pred?)
+  (lambda(implst)
+    (let helper ([ls implst])
+      (or (null? ls) (pred? ls)
+        (and (pred? (car ls)) (helper (cdr ls)))))))
+
+(define list-set-at-index!
+  (lambda (ls ind val)
+    (if (= 0 ind) (set-car! ls val)
+      (list-set-at-index! (cdr ls) (- ind 1) val))))
+
+(define add-to-end-of-list!
+  (lambda (ls val)
+    (cond
+      [(> (length ls) 1) (add-to-end-of-list! (cdr ls) val)]
+      [(= (length ls) 1) (set-cdr! ls (list val))])))
