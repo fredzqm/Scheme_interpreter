@@ -24,3 +24,13 @@
 
 (define result
 	(assembleResult pat-r matches '()))
+
+(define p
+	(parse-syntax-pattern 
+		'(() b1 b2 ...)
+		))
+
+(define r
+	(parse-result-pattern
+		'(let () b1 b2 ...)
+		))

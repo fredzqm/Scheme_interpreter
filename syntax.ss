@@ -3,7 +3,7 @@
   [sympt (id symbol?)]
   [exprpt (id symbol?)]
   [multpt (eachpt syntax-pattern?)]
-  [contpt (symbol? sym)]
+  [contpt (sym symbol?)]
   [emptpt]
   )
 
@@ -13,6 +13,61 @@
   [exprpt-r (id symbol?)]
   [contpt-r (sym symbol?)]
   )
+
+
+(define parse-syntax-pattern
+  (lambda (pat)
+    (cond
+      [(null? pat)
+        (emptpt)]
+      [(symbol? pat) ; todo
+        (exprpt pat)]
+      [(not (pair? pat))
+        (eopl:error 'parse-syntax-pattern "Not a proper syntax pattern ~s" pat)]
+      [else (let ([carPat (car pat)] [cdrPat (cdr pat)])
+        (cond 
+          [(null? cdrPat)
+            (listpt (parse-syntax-pattern carPat)(emptpt))]
+          [(eq? (car cdrPat) '...)
+            (if (not (null? (cdr cdrPat)))
+              (eopl:error 'parse-syntax-pattern "... should be the last element ~s" pat))
+            (multpt (parse-syntax-pattern carPat))]
+          [else (listpt (parse-syntax-pattern carPat)
+              (parse-syntax-pattern cdrPat))]))])))
+
+
+(define parse-result-pattern
+  (lambda (pat)
+    (cond
+      [(symbol? pat)
+        (if (eq? pat '...)
+          '...
+          (exprpt-r pat))]
+      [(list? pat)
+        (let ([parsed
+          (let loop ([pat pat])
+            (if (null? pat) '(0)
+              (let ([pat (parse-result-pattern (car pat))]
+                    [rest (loop (cdr pat))])
+                (let loop2 ([pat pat]
+                            [multOrder (car rest)]
+                            [end (cdr rest)])
+                  (cond
+                    [(eq? pat '...) 
+                      (cons (+ 1 multOrder) end)]
+                    [(= 0 multOrder) 
+                      (cons* 0 pat end)]
+                    [else (loop2 (multpt-r 0 pat) (- multOrder 1) end)])))))])
+        (if (not (= 0 (car parsed)))
+          (eopl:error 'parse-result-pattern "... is not matched to symbol ~s" pat))
+        (listpt-r (cdr parsed)))]
+      [else (eopl:error 'parse-result-pattern "Invalid pattern ~s" pat)])))
+
+
+
+
+
+
 
 (define matchRule
   (lambda (pattern result body)
@@ -59,5 +114,3 @@
       [contpt-r (sym)
           (cons sym end)])))
     
-
-
