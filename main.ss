@@ -183,8 +183,7 @@
 ;      [else (eopl:error 'parse-exp "bad expression: ~s" datum)])))
 (define parse-exp
   (lambda (datum env)
-     (let* ([curlev-parse (lambda (exp) (parse-exp exp env))]
-            [parsed 
+     (let* ([curlev-parse (lambda (exp) (parse-exp exp env))])
         (cond
           [(symbol? datum) (var-cexp datum)]
           [(number? datum) (lit-cexp datum)]
@@ -201,12 +200,92 @@
                               (lambda(x) (apply-syntax x (cdr datum) env)) ; does proper syntax exapnsion
                               (lambda() (app-cexp (var-cexp ratorSym) (map (lambda (d) (parse-exp d env)) (cdr datum))))))))
               (app-cexp (parse-exp (car datum) env) (map (lambda (d) (parse-exp d env)) (cdr datum))))]
-          [else (eopl:error 'parse-exp "bad expression: ~s" datum)])])
-      (if (cexpression? parsed)
-        parsed
-        (curlev-parse parsed))
-    )))
+          [else (eopl:error 'parse-exp "bad expression: ~s" datum)]))))
 
+
+; Zero error-checking for now
+(define apply-syntax
+  (lambda (syntax body env)
+    (let ([curlev-parse (lambda (exp) (parse-exp exp env))])
+      (cases syntaxType syntax
+        [patternSyntax (syntaxList)
+            (or (ormap (lambda(x) (matchRule (car x) (cdr x) body)) syntax)
+              (eopl:error 'apply-syntax "Attempt to apply bad syntax: ~s" syntax))]
+        [coreSyntax (sym)
+          (case sym
+            [(quote) (apply lit-cexp body)]
+            [(lambda)
+              (lambda-cexp (car body) (map curlev-parse (cdr body)))]
+            [(if)
+              (if-cexp
+                (curlev-parse (car body))
+                (curlev-parse (cadr body))
+                (if (null? (cddr body))
+                    (lit-cexp (void))
+                    (curlev-parse (caddr body))))])]
+        [primitiveSyntax (sym)
+          (curlev-parse
+            (case sym
+              [(let)
+                (if (symbol? (car body))
+                  ; (let loop ([a v1] [b v2]) body) -> (let ([loop (lambda (a b) body)]) (loop a b))
+                  ; Named Let
+                  ; Warning; Letrec not implemented
+                  (letrec ([name (car body)]
+                        [vars (map car (cadr body))]
+                        [vals (map cadr (cadr body))]
+                        [bodies (cddr body)])
+                    (list 'let
+                      (list (list name (cons* 'lambda vars bodies)))
+                      (cons name vals)))
+                  ; Reguler Let
+                  (app-cexp (lambda-cexp (map car (car body)) (map curlev-parse (cdr body)))
+                    (map (lambda (p) (parse-exp (cadr p) env)) (car body))))]
+              [(let*)
+                (if (or (null? (cdar body)) (null? (car body)))
+                    (cons 'let body)
+                    (list 'let (list (caar body))
+                          (cons* 'let* (cdar body) (cdr body))))]
+              [(letrec) (eopl:error 'eval-exp "Not implemented")]
+              [(letrec*) (eopl:error 'eval-exp "Not implemented")]
+              [(begin)
+                (list (cons* 'lambda '() body))]
+              [(and)
+                (cond
+                  [(null? body) #t]
+                  [(null? (cdr body)) (car body)]
+                  [else (list 'if (car body)
+                          (cons 'and (cdr body))
+                          #f)])]
+              [(or)
+                (cond
+                  [(null? body) #f]
+                  [(null? (cdr body)) (car body)]
+                  [else (list 'let
+                            (list (list 'val (car body)))
+                            (list 'if 'val 'val (cons 'or (cdr body))))])]
+              [(cond)
+                (if (null? (cdr body))
+                  (if (eqv? 'else (caar body))
+                    (cadar body)
+                    (app-cexp (var-cexp 'void) '()))
+                  (list 'if (caar body) (cadar body) (cons 'cond (cdr body))))]
+              [(case)
+                (let ([var (car body)]
+                      [tests (cdr body)])
+                  (list 'let (list (list 'var var))
+                    (cons 'cond
+                      (map (lambda (p)
+                              (if (eqv? 'else (car p))
+                                p
+                                (list (cons 'or (map (lambda (t) (list 'eqv? var t)) (car p))) (cadr p)))) tests))))]
+              [(while)
+                ; (while t e1 e2 ...) -> (let temp ([test t]) e1 e2 ... (temp t))
+                (let ([t (car body)]
+                      [bodies (append (cdr body) (list (list 'temp t)))])
+                  (cons* 'let 'temp (list (list 'test t)) bodies))])
+            )
+          ]))))
 
 
 (define unparse-exp
@@ -294,13 +373,18 @@
 ;   SYNTAX EXPANSION    |
 ;                       |
 ;-----------------------+
-(define *prim-syntax-names* '(quote lambda if let let* letrec letrec* begin and or cond case while))
+(define *core-syntax-names* '(quote lambda if))
+(define *prim-syntax-names* '(let let* letrec letrec* begin and or cond case while))
 
 ; To be added with define-syntax
-(define global-syntax-env (extend-env 
-  *prim-syntax-names*
-  (map primitiveSyntax *prim-syntax-names*)
-  (empty-env)))
+(define global-syntax-env 
+  (extend-env 
+    *prim-syntax-names*
+    (map primitiveSyntax *prim-syntax-names*)
+    (extend-env
+      *core-syntax-names*
+      (map coreSyntax *core-syntax-names*) 
+      (empty-env))))
 
 ; To be added later
 ; (define syntax-expand
@@ -545,6 +629,7 @@
       [else (error 'apply-prim-proc 
             "Bad primitive procedure name: ~s" 
             prim-proc)])))
+
 
 (define rep      ; "read-eval-print" loop.
   (lambda ()
