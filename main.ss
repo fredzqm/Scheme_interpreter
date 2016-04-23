@@ -60,8 +60,9 @@
   [patternSyntax 
     (syntaxList (list-of (lambda(x) 
       (and (syntax-pattern? (car x))(result-pattern? (cdr x))))))]
-  [coreSyntax 
-    (sym symbol?)]
+  [coreSyntax
+    (sym symbol?)
+    (validSyntax (list-of syntax-pattern?))]
   [primitiveSyntax 
     (sym symbol?)])
 
@@ -136,21 +137,24 @@
                 (apply-env env (car datum)
                   (lambda (x) (app-cexp (var-cexp ratorSym) (map curlev-parse (cdr datum)))) ; occur bounded
                   (lambda () (apply-env global-syntax-env (car datum) ; occur free
-                              (lambda(x) (apply-syntax x (cdr datum) env)) ; does proper syntax exapnsion
+                              (lambda(x) (apply-syntax x datum env)) ; does proper syntax exapnsion
                               (lambda() (app-cexp (var-cexp ratorSym) (map (lambda (d) (parse-exp d env)) (cdr datum))))))))
               (app-cexp (parse-exp (car datum) env) (map (lambda (d) (parse-exp d env)) (cdr datum))))]
           [else (eopl:error 'parse-exp "bad expression: ~s" datum)]))))
 
 ; Zero error-checking for now
 (define apply-syntax
-  (lambda (syntax body env)
-    (let ([curlev-parse (lambda (exp) (parse-exp exp env))])
+  (lambda (syntax exp env)
+    (let ([body (cdr exp)]
+      [curlev-parse (lambda (exp) (parse-exp exp env))])
       (cases syntaxType syntax
         [patternSyntax (syntaxList)
             (curlev-parse
               (or (ormap (lambda(x) (matchRule (car x) (cdr x) body)) syntaxList)
-              (eopl:error 'apply-syntax "Attempt to apply bad syntax: ~s" syntax)))]
-        [coreSyntax (sym)
+                (eopl:error 'syntax-expansion "Invalid Sytanx ~s" exp)))]
+        [coreSyntax (sym validSyntax)
+          (or (ormap (lambda(x) (matchpattern x body)) validSyntax)
+            (eopl:error 'parse-exp "Invalid Sytanx ~s" exp))
           (case sym
             [(quote) (apply lit-cexp body)]
             [(lambda)
@@ -300,9 +304,19 @@
         (map primitiveSyntax *prim-syntax-names*))
     (extend-env
       '(quote lambda if)
-      (list (coreSyntax 'quote) 
-        (coreSyntax 'lambda)
-        (coreSyntax 'if)) 
+      (list 
+        (coreSyntax 'quote (list
+          (listpt (exprpt 'e) (emptpt))))
+        (coreSyntax 'lambda (list
+          (listpt (multpt (sympt 'v))
+            (multpt (exprpt 'e)))))
+        (coreSyntax 'if (list
+          (listpt (exprpt 'p)
+            (listpt (exprpt 't)
+              (listpt (exprpt 'e) (emptpt))))
+          (listpt (exprpt 'p)
+            (listpt (exprpt 't) (emptpt)))
+          )))
       (empty-env))))
 
 
