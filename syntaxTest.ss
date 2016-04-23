@@ -15,10 +15,12 @@
 		(multpt-r 1 (exprpt-r 'v))
 		)))
 
+(define body
+	'(([a (+ 1 2)][b (* 1 2)])
+			(+ a b) (- a b)))
+
 (define matches 
-	(matchpattern pat
-		'(([a (+ 1 2)][b (* 1 2)])
-			(+ a b) (- a b))))
+	(matchpattern pat body))
 
 (define result
 	(assembleResult pat-r matches '()))

@@ -17,7 +17,7 @@
 (define matchRule
   (lambda (pattern result body)
     (let ([matches (matchpattern pattern body)])
-      (and matches (assembleResult result matches '())))))
+      (and matches (car (assembleResult result matches '()))))))
 
 (define matchpattern
   (lambda (pattern body)
