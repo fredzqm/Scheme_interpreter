@@ -30,9 +30,21 @@
                 (if (null? (cddr body))
                     (app-cexp (var-cexp 'void) '())
                     (curlev-parse (caddr body))))]
-            [(let) 
-              (app-cexp (lambda-cexp (map car (car body)) (map curlev-parse (cdr body)))
-                (map (lambda (p) (parse-exp (cadr p) env)) (car body)))]
+            [(let)
+              (if (symbol? (car body))
+                ; (let loop ([a v1] [b v2]) body) -> (let ([loop (lambda (a b) body)]) (loop a b))
+                ; Named Let
+                ; Warning; Letrec not implemented
+                (letrec ([name (car body)]
+                      [vars (map car (cadr body))]
+                      [vals (map cadr (cadr body))]
+                      [bodies (cddr body)])
+                  (list 'let
+                    (list (list name (cons* 'lambda vars bodies)))
+                    (cons name vals)))
+                ; Reguler Let
+                (app-cexp (lambda-cexp (map car (car body)) (map curlev-parse (cdr body)))
+                  (map (lambda (p) (parse-exp (cadr p) env)) (car body))))]
             [(let*)
               (if (or (null? (cdar body)) (null? (car body)))
                   (cons 'let body)
@@ -46,22 +58,41 @@
             [(letrec) (eopl:error 'eval-exp "Not implemented")]
             [(letrec*) (eopl:error 'eval-exp "Not implemented")]
             [(begin)
-              (app-exp (lambda-exp '() body) '())]
+              (list (cons* 'lambda '() body))]
             [(and)
               (cond
-                [(null? body) (lit-exp #t)]
+                [(null? body) #t]
                 [(null? (cdr body)) (car body)]
-                [else (if-exp #t (car body)
-                        (and-exp (cdr body))
-                        (lit-exp #f))])]
+                [else (list 'if (car body)
+                        (cons 'and (cdr body))
+                        #f)])]
             [(or)
               (cond
-                [(null? body) (lit-exp #f)]
+                [(null? body) #f]
                 [(null? (cdr body)) (car body)]
-                [else (let-exp 'let
-                  (list (cons 'val (car body)))
-                  (list (if-exp #t (var-exp 'val) (var-exp 'val) 
-                  (or-exp (cdr body)))))])])]))))
+                [else (list 'let
+                          (list (list 'val (car body)))
+                          (list 'if 'val 'val (cons 'or (cdr body))))])]
+            [(cond)
+              (if (null? (cdr body))
+                (if (eqv? 'else (caar body))
+                  (cadar body)
+                  (app-cexp (var-cexp 'void) '()))
+                (list 'if (caar body) (cadar body) (cons 'cond (cdr body))))]
+            [(case)
+              (let ([var (car body)]
+                    [tests (cdr body)])
+                (list 'let (list (list 'var var))
+                  (cons 'cond
+                    (map (lambda (p)
+                            (if (eqv? 'else (car p))
+                              p
+                              (list (cons 'or (map (lambda (t) (list 'eqv? var t)) (car p))) (cadr p)))) tests))))]
+            [(while)
+              ; (while t e1 e2 ...) -> (let temp ([test t]) e1 e2 ... (temp t))
+              (let ([t (car body)]
+                    [bodies (append (cdr body) (list (list 'temp t)))])
+                (cons* 'let 'temp (list (list 'test t)) bodies))])]))))
 
 (define matchRule
   (lambda (pattern result body)

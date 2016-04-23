@@ -294,7 +294,7 @@
 ;   SYNTAX EXPANSION    |
 ;                       |
 ;-----------------------+
-(define *prim-syntax-names* '(quote lambda if let let* letrec letrec* begin and or))
+(define *prim-syntax-names* '(quote lambda if let let* letrec letrec* begin and or cond case while))
 
 ; To be added with define-syntax
 (define global-syntax-env (extend-env 
@@ -458,8 +458,8 @@
                     proc-value)])))
   
 (define *prim-proc-names* '(apply map + - * / add1 sub1 zero? not = < > <= >= cons list null? assq eq?
-                            equal? atom? car caar caaar caadr cadar cdaar caddr cdadr cddar cdddr cadr
-                            cdar cddr cdr length list->vector list? pair? procedure? vector->list
+                            eqv? equal? atom? car caar caaar caadr cadar cdaar caddr cdadr cddar cdddr
+                            cadr cdar cddr cdr length list->vector list? pair? procedure? vector->list
                             vector make-vector vector-ref vector? number? symbol? set-car! set-cdr!
                             vector-set! display newline void))
 
@@ -507,6 +507,7 @@
       [(null?) (apply null? args)]
       [(assq) (apply assq args)]
       [(eq?) (apply eq? args)]
+      [(eqv?) (apply eqv? args)]
       [(equal?) (apply equal? args)]
       [(atom?) (apply atom? args)]
       [(car) (apply car args)]
