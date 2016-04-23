@@ -183,11 +183,11 @@
                   ; (let loop ([a v1] [b v2]) body) -> (let ([loop (lambda (a b) body)]) (loop a b))
                   ; Named Let
                   ; Warning; Letrec not implemented
-                  (letrec ([name (car body)]
+                  (let ([name (car body)]
                         [vars (map car (cadr body))]
                         [vals (map cadr (cadr body))]
                         [bodies (cddr body)])
-                    (list 'let
+                    (list 'letrec
                       (list (list name (cons* 'lambda vars bodies)))
                       (cons name vals)))
                   ; Reguler Let
@@ -232,7 +232,7 @@
                                 p
                                 (list (cons 'or (map (lambda (t) (list 'eqv? var t)) (car p))) (cadr p)))) tests))))]
               [(while)
-                ; (while t e1 e2 ...) -> (let temp ([test t]) e1 e2 ... (temp t))
+                ; (while t e1 e2 ...) -> (letrec temp ([test t]) e1 e2 ... (temp t))
                 (let ([t (car body)]
                       [bodies (append (cdr body) (list (list 'temp t)))])
                   (cons* 'let 'temp (list (list 'test t)) bodies))])
