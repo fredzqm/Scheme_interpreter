@@ -59,7 +59,7 @@
 (define-datatype syntaxType syntaxType?
   [patternSyntax 
     (syntaxList (list-of (lambda(x) 
-      (and (syntax-pattern? (car x))(syntax-pattern? (cdr x))))))]
+      (and (syntax-pattern? (car x))(result-pattern? (cdr x))))))]
   [coreSyntax 
     (sym symbol?)]
   [primitiveSyntax 
@@ -147,8 +147,9 @@
     (let ([curlev-parse (lambda (exp) (parse-exp exp env))])
       (cases syntaxType syntax
         [patternSyntax (syntaxList)
-            (or (ormap (lambda(x) (matchRule (car x) (cdr x) body)) syntax)
-              (eopl:error 'apply-syntax "Attempt to apply bad syntax: ~s" syntax))]
+            (curlev-parse
+              (or (ormap (lambda(x) (matchRule (car x) (cdr x) body)) syntaxList)
+              (eopl:error 'apply-syntax "Attempt to apply bad syntax: ~s" syntax)))]
         [coreSyntax (sym)
           (case sym
             [(quote) (apply lit-cexp body)]
@@ -276,18 +277,34 @@
 ;   SYNTAX EXPANSION    |
 ;                       |
 ;-----------------------+
-(define *core-syntax-names* '(quote lambda if))
 (define *prim-syntax-names* '(let let* letrec letrec* begin and or cond case while))
 
 ; To be added with define-syntax
 (define global-syntax-env 
   (extend-env 
-    *prim-syntax-names*
-    (map primitiveSyntax *prim-syntax-names*)
+     (cons 'let *prim-syntax-names*)
+     (cons (patternSyntax (list
+        (cons 
+          (listpt (multpt (listpt (sympt 's) (listpt (exprpt 'v) (emptpt))))
+              (listpt (exprpt 'b1)(multpt (exprpt 'b2))))
+          (listpt-r (list
+              (listpt-r (list 
+                (contpt-r 'lambda)
+                (listpt-r (list
+                  (multpt-r 1 (exprpt-r 's))))
+                (exprpt-r 'b1)
+                (multpt-r 2 (exprpt-r 'b2))
+                ))
+              (multpt-r 1 (exprpt-r 'v))
+              )))))
+        (map primitiveSyntax *prim-syntax-names*))
     (extend-env
-      *core-syntax-names*
-      (map coreSyntax *core-syntax-names*) 
+      '(quote lambda if)
+      (list (coreSyntax 'quote) 
+        (coreSyntax 'lambda)
+        (coreSyntax 'if)) 
       (empty-env))))
+
 
 
 ;-------------------+
