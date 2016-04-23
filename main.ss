@@ -13,11 +13,6 @@
 ;-------------------+
 
 ; parsed expression
-(define (implist-of pred?)
-  (lambda(implst)
-    (let helper ([ls implst])
-      (or (null? ls) (pred? ls)
-        (and (pred? (car ls)) (helper (cdr ls)))))))
 
 
 ; (define-datatype expression expression?
@@ -82,6 +77,8 @@
       (then-op cexpression?)
       (else-op cexpression?)]
   [set!-cexp (var symbol?)
+      (val cexpression?)]
+  [define-cexp (var symbol?)
       (val cexpression?)])
 
 ;; environment type definitions
@@ -172,6 +169,10 @@
                     (curlev-parse (caddr body))))]
             [(set!)
               (set!-cexp 
+                (car body)
+                (curlev-parse (cadr body)))]
+            [(define)
+              (define-cexp
                 (car body)
                 (curlev-parse (cadr body)))]
             [else (eopl:error 'apply-syntax "not implemented core expression ~s" exp)])]
@@ -281,9 +282,41 @@
     	      (succeed (list-ref vals pos))
     	      (apply-env env sym succeed fail)))))))
 
+(define add-to-env!
+  (lambda (env sym val)
+    (cases environment env
+      (empty-env-record () (void))
+      (extended-env-record (syms vals env)
+        (add-to-end-of-list! syms sym)
+        (add-to-end-of-list! vals val)))))
 
+(define change-env!
+  (lambda (env sym val)
+    (cases environment env
+      (empty-env-record () (change-env! global-env sym val)) ; At top level
+      (extended-env-record (syms vals encl_env)
+        (let ((pos (list-find-position sym syms)))
+          (if (number? pos)
+            (list-set-at-index! vals pos val) ; Value is found
+            (cases environment encl_env ; Value is NOT found
+              (extended-env-record (lsyms lvals lenv)
+                (change-env! encl_env sym val))
+              (empty-env-record () ; Doesn't gurantee in global environment
+                (if (eq? env global-env)
+                    (add-to-env! env sym val)
+                    (change-env! encl_env sym val))))
+            ))))))
 
-
+(define define-in-env!
+  (lambda (env sym val)
+    (cases environment env
+      (empty-env-record () (define-in-env! global-env sym val)) ; At top level
+      (extended-env-record (syms vals encl_env)
+        (let ((pos (list-find-position sym syms)))
+          (if (number? pos)
+            (list-set-at-index! vals pos val) ; Value is found
+            (add-to-env! env sym val) ; We don't care if it is in global; if it's not found in the current scope, it just needs to be added.
+            ))))))
 
 ;-----------------------+
 ;                       |
@@ -312,7 +345,7 @@
               )))))
         (map primitiveSyntax *prim-syntax-names*))
     (extend-env
-      '(quote lambda if set!)
+      '(quote lambda if set! define)
       (list 
         (coreSyntax 'quote (list
           (listpt (exprpt 'e) (emptpt))))
@@ -326,6 +359,9 @@
           (listpt (exprpt 'p)
             (listpt (exprpt 't) (emptpt)))))
         (coreSyntax 'set! (list 
+          (listpt (sympt 'v)
+            (listpt (exprpt 'e) (emptpt)))))
+        (coreSyntax 'define (list 
           (listpt (sympt 'v)
             (listpt (exprpt 'e) (emptpt))))))
       (empty-env))))
@@ -367,6 +403,12 @@
           (eval-exp else-op env))]
       [lambda-cexp (vars body)
         (closure vars body env)]
+      [set!-cexp (var val)
+        (let ([val (eval-exp val env)])
+          (change-env! env var val))]
+      [define-cexp (var val)
+        (let ([val (eval-exp val env)])
+          (define-in-env! env var val))]
       [app-cexp (rator rands)
         (let ([proc-value (eval-exp rator env)]
               [args (map (lambda(x) (eval-exp x env)) rands)])
@@ -531,3 +573,21 @@
         (cons (car vars) (loop (cdr vars)))
         (list vars)))])
   loop))
+
+(define (implist-of pred?)
+  (lambda(implst)
+    (let helper ([ls implst])
+      (or (null? ls) (pred? ls)
+        (and (pred? (car ls)) (helper (cdr ls)))))))
+
+(define list-set-at-index!
+  (lambda (ls ind val)
+    (if (= 0 ind) (set-car! ls val)
+      (list-set-at-index! (cdr ls) (- ind 1) val))))
+
+(define add-to-end-of-list!
+  (lambda (ls val)
+    (cond
+      [(> (length ls) 1) (add-to-end-of-list! (cdr ls) val)]
+      [(= (length ls) 1) (set-cdr! ls (list val))]
+      [else (eopl:error 'add-to-end-of-list! "1st argument is an empty list!")])))
