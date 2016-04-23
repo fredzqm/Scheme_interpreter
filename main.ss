@@ -20,41 +20,50 @@
         (and (pred? (car ls)) (helper (cdr ls)))))))
 
 
-(define-datatype expression expression?
-  [var-exp (id symbol?)]
-  [lit-exp
-       (datum (lambda (x)
-          (ormap 
-           (lambda (pred) (pred x))
-           (list number? vector? boolean? symbol? string? pair? null?))))]
-  [app-exp (rator expression?)
-      (rands (list-of expression?))]
-  [app-sym-exp (ratorSym symbol?)
-      (rands (list-of expression?))]
-  [lambda-exp (vars (implist-of symbol?))
-      (body (list-of expression?))]
-  [set!-exp (var symbol?)
-      (val expression?)]
-  [if-exp
-      (two-armed? boolean?)
-      (test expression?)
-      (then-op expression?)
-      (else-op (or-pred null? expression?))]
-  [let-exp (lettype (lambda(x)(or (eq? x 'let)(eq? x 'letrec)(eq? x 'let*)(eq? x 'letrec*))))
-      (vars-ls (list-of (lambda(y)(and (symbol? (car y))(expression? (cdr y))))))
-      (body (list-of expression?))]
-  [let-named-exp (name symbol?)
-      (vars-ls (list-of (lambda(y)(and (symbol? (car y))(expression? (cdr y))))))
-      (body (list-of expression?))]
-  [quote-exp 
-        (datum (lambda (x)
-          (ormap 
-           (lambda (pred) (pred x))
-           (list number? vector? boolean? symbol? string? pair? null?))))]
-  [begin-exp (body (list-of expression?))]
-  [and-exp (body (list-of expression?))]
-  [or-exp (body (list-of expression?))]
-  )
+; (define-datatype expression expression?
+;   [var-exp (id symbol?)]
+;   [lit-exp
+;        (datum (lambda (x)
+;           (ormap 
+;            (lambda (pred) (pred x))
+;            (list number? vector? boolean? symbol? string? pair? null?))))]
+;   [app-exp (rator expression?)
+;       (rands (list-of expression?))]
+;   [app-sym-exp (ratorSym symbol?)
+;       (rands (list-of expression?))]
+;   [lambda-exp (vars (implist-of symbol?))
+;       (body (list-of expression?))]
+;   [set!-exp (var symbol?)
+;       (val expression?)]
+;   [if-exp
+;       (two-armed? boolean?)
+;       (test expression?)
+;       (then-op expression?)
+;       (else-op (or-pred null? expression?))]
+;   [let-exp (lettype (lambda(x)(or (eq? x 'let)(eq? x 'letrec)(eq? x 'let*)(eq? x 'letrec*))))
+;       (vars-ls (list-of (lambda(y)(and (symbol? (car y))(expression? (cdr y))))))
+;       (body (list-of expression?))]
+;   [let-named-exp (name symbol?)
+;       (vars-ls (list-of (lambda(y)(and (symbol? (car y))(expression? (cdr y))))))
+;       (body (list-of expression?))]
+;   [quote-exp 
+;         (datum (lambda (x)
+;           (ormap 
+;            (lambda (pred) (pred x))
+;            (list number? vector? boolean? symbol? string? pair? null?))))]
+;   [begin-exp (body (list-of expression?))]
+;   [and-exp (body (list-of expression?))]
+;   [or-exp (body (list-of expression?))]
+;   )
+
+(define-datatype syntaxType syntaxType?
+  [patternSyntax 
+    (syntaxList (list-of (lambda(x) 
+      (and (syntax-pattern? (car x))(syntax-pattern? (cdr x))))))]
+  [coreSyntax 
+    (sym symbol?)]
+  [primitiveSyntax 
+    (sym symbol?)])
 
 ; the core expression of scheme. Syntax expansion should convert all code to core scheme.
 (define-datatype cexpression cexpression?
@@ -201,7 +210,6 @@
                               (lambda() (app-cexp (var-cexp ratorSym) (map (lambda (d) (parse-exp d env)) (cdr datum))))))))
               (app-cexp (parse-exp (car datum) env) (map (lambda (d) (parse-exp d env)) (cdr datum))))]
           [else (eopl:error 'parse-exp "bad expression: ~s" datum)]))))
-
 
 ; Zero error-checking for now
 (define apply-syntax

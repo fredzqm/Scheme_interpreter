@@ -1,17 +1,18 @@
 (define-datatype syntax-pattern syntax-pattern?
   [listpt (carpt syntax-pattern?) (cdrpt syntax-pattern?)]
-  [singpt (id symbol?)]
+  [sympt (id symbol?)]
+  [exprpt (id symbol?)]
   [multpt (eachpt syntax-pattern?)]
   [contpt (symbol? sym)]
-  [emptpt])
-
-(define-datatype syntaxType syntaxType?
-  [patternSyntax (syntaxList (list-of (lambda(x)(and (syntax-pattern? (car x))(syntax-pattern? (cdr x))))))]
-  [coreSyntax (sym symbol?)]
-  [primitiveSyntax (sym symbol?)]
+  [emptpt]
   )
 
-
+(define-datatype result-pattern result-pattern?
+  [listpt-r (pts (list-of result-pattern?))]
+  [multpt-r (i number?) (eachrpt result-pattern?)]
+  [exprpt-r (id symbol?)]
+  [contpt-r (sym symbol?)]
+  )
 
 (define matchRule
   (lambda (pattern result body)
@@ -24,59 +25,37 @@
       [listpt (carpt cdrpt)
         (let ([carMatch (matchpattern carpt (car body))]
           [cdrMatch (matchpattern cdrpt (cdr body))])
-        (and carMatch cdrMatch 
-          (append carMatch cdrMatch)))]
-      [singpt (id)
+        (and carMatch cdrMatch
+          (cons (append (car carMatch)(car cdrMatch))
+            (append (cdr carMatch)(cdr cdrMatch)))))]
+      [sympt (id)
         (and (symbol? body)
-          (list (cons id body)))]
+          (list (list (cons id body))))]
+      [exprpt (id)
+        (list (list (cons id body)))]
       [multpt (eachpt)
-        (if (null? body)
-          '()
-          (and (pair? body)
-            (let ([carMatch (matchpattern eachpt (car body))]
-              [cdrMatch (matchpattern pattern (cdr body))])
-              (if (null? cdrMatch)
-                (map (lambda (x) (cons (car x)(list (cdr x)))) carMatch)
-                (map (lambda (x y) (cons (car x)(cons (cdr x)(cdr y)))) carMatch cdrMatch)))))]
-      [contpt (sym) (and (eq? sym body) '())]
-      [emptpt ()(and (null? body) '())])))
+        (let ([matches (map (lambda(b) (matchpattern eachpt b)) body)])
+          (and (andmap (lambda(x) x) matches)
+            (list '() matches)))]
+      [contpt (sym) (and (eq? sym body) (list '()))]
+      [emptpt ()(and (null? body) (list '()))])))
+
 
 (define assembleResult
-  (lambda (result matches count)
-    (cases syntax-pattern result
-      [listpt (carpt cdrpt)
-        (cons (assembleResult carpt matches) (assembleResult cdrpt matches))]
-      [singpt (id)
-        (reference matches id count)]
-      [multpt (eachpt)
-        (let loop ([index (length (reference matches id count))])
-          (if (= index 0)
-            '()
-            (cons (assembleResult eachpt matches (append count (list index)))
-              (loop (- index 1)))))]
-      [contpt (sym) sym]
-      [emptpt () '()])))
-
-(define consisteLen
-  (lambda (eachpt matches count)
-    (cases syntax-pattern result
-      [listpt (carpt cdrpt)
-        (let ([carLen (consisteLen carpt matches count)]
-              [cdrLen (consisteLen cdrpt matches count)])
-          (and carLen cdrLen 
-            
-            ))]
-      [singpt (id)
-        (length (reference matches id count))]
-      [multpt (eachpt)
-        (consisteLen eachpt matches count)]
-      [contpt (sym) #t]
-      [emptpt () #t])))
+  (lambda (result matches end)
+    (cases result-pattern result
+      [listpt-r (pts)
+          (cons (fold-right (lambda (pt end)
+                        (assembleResult pt matches end))
+            '() pts) end)]
+      [multpt-r (i eachrpt)
+          (fold-right (lambda (match end)
+                        (assembleResult eachrpt match end))
+            end (list-ref matches i))]
+      [exprpt-r (id)
+          (cons (cdr (assoc id (car matches))) end)]
+      [contpt-r (sym)
+          (cons sym end)])))
+    
 
 
-(define reference
-  (lambda (matches id count)
-    (let loop ([matchLine (cdr (assoc matches id))][count count])
-      (if (null? count)
-        matchLine
-        (loop (list-ref matchLine (car count)) (cdr count))))))
