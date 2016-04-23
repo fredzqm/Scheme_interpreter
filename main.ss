@@ -149,23 +149,32 @@
       [curlev-parse (lambda (exp) (parse-exp exp env))])
       (cases syntaxType syntax
         [patternSyntax (syntaxList)
-            (curlev-parse
-              (or (ormap (lambda(x) (matchRule (car x) (cdr x) body)) syntaxList)
-                (eopl:error 'syntax-expansion "Invalid Sytanx ~s" exp)))]
+          (curlev-parse
+            (or (ormap (lambda(x) (matchRule (car x) (cdr x) body)) syntaxList)
+              (eopl:error 'syntax-expansion "Invalid Sytanx ~s" exp)))]
         [coreSyntax (sym validSyntax)
           (or (ormap (lambda(x) (matchpattern x body)) validSyntax)
-            (eopl:error 'parse-exp "Invalid Sytanx ~s" exp))
+            (eopl:error 'parse-exp "Invalid Core Syntax ~s" exp))
           (case sym
-            [(quote) (apply lit-cexp body)]
+            [(quote) 
+              (lit-cexp 
+                (car body))]
             [(lambda)
-              (lambda-cexp (car body) (map curlev-parse (cdr body)))]
+              (lambda-cexp 
+                (car body)
+                (map curlev-parse (cdr body)))]
             [(if)
               (if-cexp
                 (curlev-parse (car body))
                 (curlev-parse (cadr body))
                 (if (null? (cddr body))
                     (lit-cexp (void))
-                    (curlev-parse (caddr body))))])]
+                    (curlev-parse (caddr body))))]
+            [(set!)
+              (set!-cexp 
+                (car body)
+                (curlev-parse (cadr body)))]
+            [else (eopl:error 'apply-syntax "not implemented core expression ~s" exp)])]
         [primitiveSyntax (sym)
           (curlev-parse
             (case sym
@@ -303,7 +312,7 @@
               )))))
         (map primitiveSyntax *prim-syntax-names*))
     (extend-env
-      '(quote lambda if)
+      '(quote lambda if set!)
       (list 
         (coreSyntax 'quote (list
           (listpt (exprpt 'e) (emptpt))))
@@ -315,8 +324,10 @@
             (listpt (exprpt 't)
               (listpt (exprpt 'e) (emptpt))))
           (listpt (exprpt 'p)
-            (listpt (exprpt 't) (emptpt)))
-          )))
+            (listpt (exprpt 't) (emptpt)))))
+        (coreSyntax 'set! (list 
+          (listpt (sympt 'v)
+            (listpt (exprpt 'e) (emptpt))))))
       (empty-env))))
 
 
