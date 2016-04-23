@@ -344,8 +344,10 @@
 
 (define top-level-eval
   (lambda (form)
-    ; later we may add things that are not expressions.
-    (eval-exp form (empty-env))))
+    (cond
+      ; [(and (pair? form)(eq? (car form) 'define-syntax)
+        ; (define-syntax (cdr form)))]
+      [else (eval-exp (parse-exp form (emptpt-env)) (empty-env))])))
 
 ; eval-exp is the main component of the interpreter
 
@@ -501,13 +503,13 @@
   (lambda ()
     (display "--> ")
     ;; notice that we don't save changes to the environment...
-    (let ([answer (top-level-eval (parse-exp (read) (empty-env)))])
+    (let ([answer (top-level-eval (read))])
       ;; TODO: are there answers that should display differently?
       (eopl:pretty-print answer) (newline)
       (rep))))  ; tail-recursive, so stack doesn't grow.
 
 (define eval-one-exp
-  (lambda (x) (top-level-eval (parse-exp x (empty-env)))))
+  (lambda (x) (top-level-eval x)))
 
 ; Other Utility Methods
 (define not-pred
