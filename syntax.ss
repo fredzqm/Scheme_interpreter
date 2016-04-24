@@ -12,7 +12,7 @@
   [listpt-r (pts (list-of result-pattern?))]
   [multpt-r (i number?) (eachrpt result-pattern?)]
   [exprpt-r (id symbol?)]
-  [contpt-r (sym symbol?)]
+  [contpt-r (sym (lambda(x) #t))]
   )
 
 
