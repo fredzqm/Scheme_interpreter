@@ -198,11 +198,11 @@
               ;     ; Reguler Let
               ;     (cons (cons* 'lambda (map car (car body)) (cdr body))
               ;       (map cadr (car body))))]
-              [(let*)
-                (if (or (null? (cdar body)) (null? (car body)))
-                    (cons 'let body)
-                    (list 'let (list (caar body))
-                          (cons* 'let* (cdar body) (cdr body))))]
+              ; [(let*)
+              ;   (if (or (null? (cdar body)) (null? (car body)))
+              ;       (cons 'let body)
+              ;       (list 'let (list (caar body))
+              ;             (cons* 'let* (cdar body) (cdr body))))]
               [(letrec)
                 (let ([vars (map car (car body))]
                       [exps (map cadr (car body))]
@@ -337,15 +337,17 @@
 ;   SYNTAX EXPANSION    |
 ;                       |
 ;-----------------------+
-(define *prim-syntax-names* '(let* letrec letrec* begin and or cond case while))
+(define *prim-syntax-names* '(letrec letrec* begin and or cond case while))
 
 ; To be added with define-syntax
 (define global-syntax-env 
   (extend-env 
      ; (cons 'let *prim-syntax-names*)
-    (append '(let) *prim-syntax-names*)
-     (cons (patternSyntax (list
-        (cons 
+    (append '(let let*) *prim-syntax-names*)
+     (cons* 
+      ; let
+      (patternSyntax (list
+        (cons ; normal let
           (listpt (multpt (listpt (sympt 's) (listpt (exprpt 'v) (emptpt))) (emptpt))
             (listpt (exprpt 'b1) (multpt (exprpt 'b2) (emptpt))))
           (listpt-r (list
@@ -358,7 +360,7 @@
               ))
             (multpt-r 1 (exprpt-r 'v))
             )))
-        (cons
+        (cons ; named let
           (listpt (sympt 'name)
             (listpt (multpt (listpt (sympt 's) (listpt (exprpt 'v) (emptpt))) (emptpt))
               (listpt (exprpt 'b1) (multpt (exprpt 'b2) (emptpt)))))
@@ -382,6 +384,46 @@
               ))
             ))
         )))
+      ; [(let*)
+      ;   (if (or (null? (cdar body)) (null? (car body)))
+      ;       (cons 'let body)
+      ;       (list 'let (list (caar body))
+      ;             (cons* 'let* (cdar body) (cdr body))))]
+      (patternSyntax (list
+        (cons ; expand case
+          (listpt (listpt (listpt (sympt 's1) (listpt (exprpt 'v1) (emptpt)))
+                    (multpt (listpt (sympt 's2) (listpt (exprpt 'v2) (emptpt))) (emptpt)))
+            (listpt (exprpt 'b1) (multpt (exprpt 'b2) (emptpt))))
+          (listpt-r (list
+            (contpt-r 'let)
+            (listpt-r (list
+              (listpt-r (list
+                (exprpt-r 's1)
+                (exprpt-r 'v1)))))
+            (listpt-r (list
+              (contpt-r 'let*)
+              (listpt-r (list
+                (multpt-r 1 (listpt-r (list
+                                (exprpt-r 's2)
+                                (exprpt-r 'v2)
+                                )))))))
+              (exprpt-r 'b1)
+              (multpt-r 2 (exprpt-r 'b2))
+            )))
+        (cons ; base case
+          (listpt (listpt (listpt (sympt 's1) (listpt (exprpt 'v1) (emptpt))) (emptpt))
+            (listpt (exprpt 'b1) (multpt (exprpt 'b2) (emptpt))))
+          (listpt-r (list
+            (contpt-r 'let)
+            (listpt-r (list
+              (listpt-r (list
+                (exprpt-r 's1)
+                (exprpt-r 'v1)))))
+            (exprpt-r 'b1)
+            (multpt-r 1 (exprpt-r 'b2))
+            )
+          ))
+        ))
     ; (append
       (map primitiveSyntax *prim-syntax-names*))
     (extend-env
