@@ -184,20 +184,20 @@
         [primitiveSyntax (sym)
           (curlev-parse
             (case sym
-              [(let)
-                (if (symbol? (car body))
-                  ; (let loop ([a v1] [b v2]) body) -> (let ([loop (lambda (a b) body)]) (loop a b))
-                  ; Named Let
-                  (let ([name (car body)]
-                        [vars (map car (cadr body))]
-                        [vals (map cadr (cadr body))]
-                        [bodies (cddr body)])
-                    (list 'letrec
-                      (list (list name (cons* 'lambda vars bodies)))
-                      (cons name vals)))
-                  ; Reguler Let
-                  (cons (cons* 'lambda (map car (car body)) (cdr body))
-                    (map cadr (car body))))]
+              ; [(let)
+              ;   (if (symbol? (car body))
+              ;     ; (let loop ([a v1] [b v2]) body) -> (let ([loop (lambda (a b) body)]) (loop a b))
+              ;     ; Named Let
+              ;     (let ([name (car body)]
+              ;           [vars (map car (cadr body))]
+              ;           [vals (map cadr (cadr body))]
+              ;           [bodies (cddr body)])
+              ;       (list 'letrec
+              ;         (list (list name (cons* 'lambda vars bodies)))
+              ;         (cons name vals)))
+              ;     ; Reguler Let
+              ;     (cons (cons* 'lambda (map car (car body)) (cdr body))
+              ;       (map cadr (car body))))]
               [(let*)
                 (if (or (null? (cdar body)) (null? (car body)))
                     (cons 'let body)
@@ -337,28 +337,52 @@
 ;   SYNTAX EXPANSION    |
 ;                       |
 ;-----------------------+
-(define *prim-syntax-names* '(let let* letrec letrec* begin and or cond case while))
+(define *prim-syntax-names* '(let* letrec letrec* begin and or cond case while))
 
 ; To be added with define-syntax
 (define global-syntax-env 
   (extend-env 
      ; (cons 'let *prim-syntax-names*)
-    (append *prim-syntax-names*)
-     ; (cons (patternSyntax (list
-     ;    (cons 
-     ;      (listpt (multpt (listpt (sympt 's) (listpt (exprpt 'v) (emptpt))))
-     ;          (listpt (exprpt 'b1)(multpt (exprpt 'b2))))
-     ;      (listpt-r (list
-     ;          (listpt-r (list 
-     ;            (contpt-r 'lambda)
-     ;            (listpt-r (list
-     ;              (multpt-r 1 (exprpt-r 's))))
-     ;            (exprpt-r 'b1)
-     ;            (multpt-r 2 (exprpt-r 'b2))
-     ;            ))
-     ;          (multpt-r 1 (exprpt-r 'v))
-     ;          )))))
-    (append
+    (append '(let) *prim-syntax-names*)
+     (cons (patternSyntax (list
+        (cons 
+          (listpt (multpt (listpt (sympt 's) (listpt (exprpt 'v) (emptpt))) (emptpt))
+            (listpt (exprpt 'b1) (multpt (exprpt 'b2) (emptpt))))
+          (listpt-r (list
+            (listpt-r (list 
+              (contpt-r 'lambda)
+              (listpt-r (list
+                (multpt-r 1 (exprpt-r 's))))
+              (exprpt-r 'b1)
+              (multpt-r 2 (exprpt-r 'b2))
+              ))
+            (multpt-r 1 (exprpt-r 'v))
+            )))
+        (cons
+          (listpt (sympt 'name)
+            (listpt (multpt (listpt (sympt 's) (listpt (exprpt 'v) (emptpt))) (emptpt))
+              (listpt (exprpt 'b1) (multpt (exprpt 'b2) (emptpt)))))
+          (listpt-r (list
+            (contpt-r 'letrec)
+            (listpt-r (list
+              (listpt-r (list 
+                (exprpt-r 'name)
+                (listpt-r (list 
+                  (contpt-r 'lambda)
+                  (listpt-r (list
+                    (multpt-r 1 (exprpt-r 's))))
+                  (exprpt-r 'b1)
+                  (multpt-r 2 (exprpt-r 'b2))
+                  ))
+                ))
+              ))
+            (listpt-r (list
+              (exprpt-r 'name)
+              (multpt-r 1 (exprpt-r 'v))
+              ))
+            ))
+        )))
+    ; (append
       (map primitiveSyntax *prim-syntax-names*))
     (extend-env
       '(quote lambda if set! define)
@@ -366,8 +390,10 @@
         (coreSyntax 'quote (list
           (listpt (exprpt 'e) (emptpt))))
         (coreSyntax 'lambda (list
-          (listpt (multpt (sympt 'v))
-            (multpt (exprpt 'e)))))
+          (listpt (multpt (sympt 'v) (sympt 'l))
+            (multpt (exprpt 'e) (emptpt)))
+          (listpt (multpt (sympt 'v) (emptpt))
+            (multpt (exprpt 'e) (emptpt)))))
         (coreSyntax 'if (list
           (listpt (exprpt 'p)
             (listpt (exprpt 't)

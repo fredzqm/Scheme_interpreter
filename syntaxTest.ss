@@ -1,7 +1,12 @@
 
+; (define pat
+; 	(listpt (multpt (listpt (sympt 's) (listpt (exprpt 'v) (emptpt))) (emptpt))
+; 		(listpt (exprpt 'b1)(multpt (exprpt 'b2) (emptpt)))))
+
 (define pat
-	(listpt (multpt (listpt (sympt 's) (listpt (exprpt 'v) (emptpt))))
-		(listpt (exprpt 'b1)(multpt (exprpt 'b2)))))
+	(listpt (multpt (sympt 'v) (emptpt))
+            (multpt (exprpt 'e) (emptpt)))
+	)
 
 (define pat-r
 	(listpt-r (list
@@ -15,9 +20,12 @@
 		(multpt-r 1 (exprpt-r 'v))
 		)))
 
+; (define body
+; 	'(([a (+ 1 2)][b (* 1 2)])
+; 			(+ a b) (- a b)))
+
 (define body
-	'(([a (+ 1 2)][b (* 1 2)])
-			(+ a b) (- a b)))
+	'(() 2))
 
 (define matches 
 	(matchpattern pat body))
