@@ -2,6 +2,11 @@
 
 ;:  Single-file version of the interpreter.
 ;; Easier to submit to server, probably harder to use in the development process
+(define map
+  (lambda (proc ls)
+    (if (null? ls)
+        '()
+        (cons (proc (car ls)) (map proc (cdr ls))))))
 
 (load "chez-init.ss") 
 (load "syntax.ss")
@@ -199,7 +204,17 @@
                     (cons 'let body)
                     (list 'let (list (caar body))
                           (cons* 'let* (cdar body) (cdr body))))]
-              [(letrec) (eopl:error 'eval-exp "Not implemented")]
+              [(letrec)
+                (let ([vars (map car (car body))]
+                      [exps (map cadr (car body))]
+                      [bodies (cdr body)]
+                      [newSym (create-symbol-counter)])
+                  (list 'let
+                        (map (lambda (var) (list var #f)) vars)
+                        (append (list 'let (map (lambda (exp) (list (newSym) exp)) exps))
+                          (let ([newSym (create-symbol-counter)])
+                            (map (lambda (var) (list 'set! var (newSym))) vars))
+                          (list (cons* 'let '() bodies)))))]
               [(letrec*) (eopl:error 'eval-exp "Not implemented")]
               [(begin)
                 (list (cons* 'lambda '() body))]
@@ -383,7 +398,7 @@
     (cond
       ; [(and (pair? form)(eq? (car form) 'define-syntax)
         ; (define-syntax (cdr form)))]
-      [else (eval-exp (parse-exp form (emptpt-env)) (empty-env))])))
+      [else (eval-exp (parse-exp form (empty-env)) (empty-env))])))
 
 ; eval-exp is the main component of the interpreter
 
@@ -593,3 +608,11 @@
       [(> (length ls) 1) (add-to-end-of-list! (cdr ls) val)]
       [(= (length ls) 1) (set-cdr! ls (list val))]
       [else (eopl:error 'add-to-end-of-list! "1st argument is an empty list!")])))
+
+(define create-symbol-counter
+  (lambda ()
+    (let ([count 0])
+      (lambda ()
+        (let ([current count])
+          (set! count (+ 1 count))
+          (string->symbol (number->string current)))))))
