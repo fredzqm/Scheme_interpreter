@@ -72,7 +72,7 @@
   [lit-cexp
        (datum (lambda (x)
           (ormap (lambda (pred) (pred x))
-           (list number? vector? boolean? symbol? string? pair? null?))))]
+           (list number? vector? boolean? symbol? string? pair? null? void?))))]
   [app-cexp (rator cexpression?)
       (rands (list-of cexpression?))]
   [lambda-cexp (vars (implist-of symbol?))
@@ -188,7 +188,6 @@
                 (if (symbol? (car body))
                   ; (let loop ([a v1] [b v2]) body) -> (let ([loop (lambda (a b) body)]) (loop a b))
                   ; Named Let
-                  ; Warning; Letrec not implemented
                   (let ([name (car body)]
                         [vars (map car (cadr body))]
                         [vals (map cadr (cadr body))]
@@ -248,10 +247,10 @@
                                 p
                                 (list (cons 'or (map (lambda (t) (list 'eqv? var t)) (car p))) (cadr p)))) tests))))]
               [(while)
-                ; (while t e1 e2 ...) -> (letrec temp ([test t]) e1 e2 ... (temp t))
+                ; (while t e1 e2 ...) -> (let temp ([test t]) (if test (begin e1 e2 ... (temp t))))
                 (let ([t (car body)]
-                      [bodies (append (cdr body) (list (list 'temp t)))])
-                  (cons* 'let 'temp (list (list 'test t)) bodies))])
+                      [bodies (cdr body)])
+                  (list 'let 'temp (list (list 'test t)) (list 'if 'test (append '(begin) bodies (list (list 'temp t))))))])
             )
           ]))))
 
@@ -343,22 +342,24 @@
 ; To be added with define-syntax
 (define global-syntax-env 
   (extend-env 
-     (cons 'let *prim-syntax-names*)
-     (cons (patternSyntax (list
-        (cons 
-          (listpt (multpt (listpt (sympt 's) (listpt (exprpt 'v) (emptpt))))
-              (listpt (exprpt 'b1)(multpt (exprpt 'b2))))
-          (listpt-r (list
-              (listpt-r (list 
-                (contpt-r 'lambda)
-                (listpt-r (list
-                  (multpt-r 1 (exprpt-r 's))))
-                (exprpt-r 'b1)
-                (multpt-r 2 (exprpt-r 'b2))
-                ))
-              (multpt-r 1 (exprpt-r 'v))
-              )))))
-        (map primitiveSyntax *prim-syntax-names*))
+     ; (cons 'let *prim-syntax-names*)
+    (append *prim-syntax-names*)
+     ; (cons (patternSyntax (list
+     ;    (cons 
+     ;      (listpt (multpt (listpt (sympt 's) (listpt (exprpt 'v) (emptpt))))
+     ;          (listpt (exprpt 'b1)(multpt (exprpt 'b2))))
+     ;      (listpt-r (list
+     ;          (listpt-r (list 
+     ;            (contpt-r 'lambda)
+     ;            (listpt-r (list
+     ;              (multpt-r 1 (exprpt-r 's))))
+     ;            (exprpt-r 'b1)
+     ;            (multpt-r 2 (exprpt-r 'b2))
+     ;            ))
+     ;          (multpt-r 1 (exprpt-r 'v))
+     ;          )))))
+    (append
+      (map primitiveSyntax *prim-syntax-names*))
     (extend-env
       '(quote lambda if set! define)
       (list 
@@ -470,7 +471,7 @@
                             eqv? equal? atom? car caar caaar caadr cadar cdaar caddr cdadr cddar cdddr
                             cadr cdar cddr cdr length list->vector list? pair? procedure? vector->list
                             vector make-vector vector-ref vector? number? symbol? set-car! set-cdr!
-                            vector-set! display newline void))
+                            vector-set! display newline void quotient))
 
 (define global-env         ; for now, our initial global environment only contains 
   (extend-env            ; procedure names.  Recall that an environment associates
@@ -551,6 +552,7 @@
       [(display) (apply display args)]
       [(newline) (apply newline args)]
       [(void) (apply void args)]
+      [(quotient) (apply quotient args)]
       [else (error 'apply-prim-proc 
             "Bad primitive procedure name: ~s" 
             prim-proc)])))
@@ -569,6 +571,10 @@
   (lambda (x) (top-level-eval x)))
 
 ; Other Utility Methods
+(define void?
+  (lambda (obj)
+    (eq? (void) obj)))
+
 (define not-pred
   (lambda (pred?)
     (lambda (arg)
