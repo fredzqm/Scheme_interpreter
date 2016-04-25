@@ -349,47 +349,47 @@
 (define global-syntax-env 
   (extend-env 
      ; (cons 'let *prim-syntax-names*)
-    (append '(let let* letrec letrec* begin) *prim-syntax-names*)
+    (append '(let* letrec letrec* begin) *prim-syntax-names*)
      (cons* 
-      ; let
-      (patternSyntax (list
-        (cons ; normal let
-          (listpt (multpt (listpt (sympt 's) (listpt (exprpt 'v) (emptpt))) (emptpt))
-            (listpt (exprpt 'b1) (multpt (exprpt 'b2) (emptpt))))
-          (listpt-r (list
-            (listpt-r (list 
-              (contpt-r 'lambda)
-              (listpt-r (list
-                (multpt-r 1 (exprpt-r 's))))
-              (exprpt-r 'b1)
-              (multpt-r 2 (exprpt-r 'b2))
-              ))
-            (multpt-r 1 (exprpt-r 'v))
-            )))
-        (cons ; named let
-          (listpt (sympt 'name)
-            (listpt (multpt (listpt (sympt 's) (listpt (exprpt 'v) (emptpt))) (emptpt))
-              (listpt (exprpt 'b1) (multpt (exprpt 'b2) (emptpt)))))
-          (listpt-r (list
-            (contpt-r 'letrec)
-            (listpt-r (list
-              (listpt-r (list 
-                (exprpt-r 'name)
-                (listpt-r (list 
-                  (contpt-r 'lambda)
-                  (listpt-r (list
-                    (multpt-r 1 (exprpt-r 's))))
-                  (exprpt-r 'b1)
-                  (multpt-r 2 (exprpt-r 'b2))
-                  ))
-                ))
-              ))
-            (listpt-r (list
-              (exprpt-r 'name)
-              (multpt-r 1 (exprpt-r 'v))
-              ))
-            ))
-        )))
+      ; ; let
+      ; (patternSyntax (list
+      ;   (cons ; normal let
+      ;     (listpt (multpt (listpt (sympt 's) (listpt (exprpt 'v) (emptpt))) (emptpt))
+      ;       (listpt (exprpt 'b1) (multpt (exprpt 'b2) (emptpt))))
+      ;     (listpt-r (list
+      ;       (listpt-r (list 
+      ;         (contpt-r 'lambda)
+      ;         (listpt-r (list
+      ;           (multpt-r 1 (exprpt-r 's))))
+      ;         (exprpt-r 'b1)
+      ;         (multpt-r 2 (exprpt-r 'b2))
+      ;         ))
+      ;       (multpt-r 1 (exprpt-r 'v))
+      ;       )))
+      ;   (cons ; named let
+      ;     (listpt (sympt 'name)
+      ;       (listpt (multpt (listpt (sympt 's) (listpt (exprpt 'v) (emptpt))) (emptpt))
+      ;         (listpt (exprpt 'b1) (multpt (exprpt 'b2) (emptpt)))))
+      ;     (listpt-r (list
+      ;       (contpt-r 'letrec)
+      ;       (listpt-r (list
+      ;         (listpt-r (list 
+      ;           (exprpt-r 'name)
+      ;           (listpt-r (list 
+      ;             (contpt-r 'lambda)
+      ;             (listpt-r (list
+      ;               (multpt-r 1 (exprpt-r 's))))
+      ;             (exprpt-r 'b1)
+      ;             (multpt-r 2 (exprpt-r 'b2))
+      ;             ))
+      ;           ))
+      ;         ))
+      ;       (listpt-r (list
+      ;         (exprpt-r 'name)
+      ;         (multpt-r 1 (exprpt-r 'v))
+      ;         ))
+      ;       ))
+      ;   )))
       ; [(let*)
       ;   (if (or (null? (cdar body)) (null? (car body)))
       ;       (cons 'let body)
@@ -515,10 +515,22 @@
 ;                   |
 ;-------------------+
 
+; the shell entry
+(define rep      ; "read-eval-print" loop.
+  (lambda ()
+    (display "--> ")
+    ;; notice that we don't save changes to the environment...
+    (let ([answer (top-level-eval (read))])
+      ;; TODO: are there answers that should display differently?
+      (eopl:pretty-print answer) (newline)
+      (rep))))  ; tail-recursive, so stack doesn't grow.
+
+; the separate interpreter entry
+(define eval-one-exp
+  (lambda (x) (top-level-eval x)))
 
 
 ; top-level-eval evaluates a form in the global environment
-
 (define top-level-eval
   (lambda (form)
     (cond
@@ -526,8 +538,8 @@
         (eval-define-syntax (cdr form)))]
       [else (eval-exp (parse-exp form (empty-env)) (empty-env))])))
 
-; eval-exp is the main component of the interpreter
 
+; eval-exp is the main component of the interpreter
 (define eval-exp
   (lambda (exp env)
     (cases cexpression exp
@@ -682,18 +694,6 @@
             "Bad primitive procedure name: ~s" 
             prim-proc)])))
 
-
-(define rep      ; "read-eval-print" loop.
-  (lambda ()
-    (display "--> ")
-    ;; notice that we don't save changes to the environment...
-    (let ([answer (top-level-eval (read))])
-      ;; TODO: are there answers that should display differently?
-      (eopl:pretty-print answer) (newline)
-      (rep))))  ; tail-recursive, so stack doesn't grow.
-
-(define eval-one-exp
-  (lambda (x) (top-level-eval x)))
 
 ; Other Utility Methods
 (define void?

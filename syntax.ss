@@ -71,9 +71,10 @@
             (if (not try)
               (eopl:error 'eval-define-syntax "Invalid define-syntax format ~s" (cons 'define-syntax form)))
             (let ([keyword (car try)][constantls (cadr try)][rulesls (cddr try)])
-              (map (lambda (x) (parse-syntax-result-pair (car x)(cdr x) constantls)) rulesls)
-              )
-            ))))
+              (define-in-env! global-syntax-env
+                keyword
+                (patternSyntax
+                  (map (lambda (x) (parse-syntax-result-pair (car x)(cdr x) constantls)) rulesls))))))))
 
 
 
