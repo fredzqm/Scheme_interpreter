@@ -29,13 +29,13 @@
 ;                   |
 ;-------------------+
 
-; (define parse-syntax-result-pair
-;   (lambda (syntax result constantls)
-;     (let* ([parsed-syntax (parse-syntax-pattern syntax constantls)]
-;           [occurs (occurs-syntax-pattern parsed-syntax)]
-;           [parsed-result (parse-result-pattern result occurs)])
-;       )
-;     ))
+(define parse-syntax-result-pair
+  (lambda (syntax result constantls body)
+    (let* ([parsed-syntax (parse-syntax-pattern syntax constantls)]
+          [occurs (occurs-syntax-pattern parsed-syntax)]
+          [parsed-result (parse-result-pattern result occurs)]
+          [indexed-result (findMultIndex parsed-result occurs)])
+      (matchRule parsed-syntax indexed-result body))))
 
 
 (define parse-syntax-pattern
@@ -122,6 +122,23 @@
               (listpt-r (cdr parsed)))]
           [else (eopl:error 'parse-result-pattern "Invalid pattern ~s" pat)])))))
 
+(define findMultIndex
+  (lambda (result occurs)
+    (cases result-pattern result
+      [listpt-r (pts)
+        (let ([try (map (lambda(x) (findMultIndex x occurs)) pts)])
+          (and (andmap (lambda(x)x) try) (listpt-r try)))]
+      [multpt-r (i eachrpt)
+        (let ([try (let loop ([i 1][envs (cdr occurs)])
+              (if (null? envs) #f ; no match found
+                (let ([match (findMultIndex eachrpt (car envs))])
+                  (if match  i
+                    (loop (+ i 1) (cdr envs))))))])
+          (and try (multpt-r try eachrpt)))]
+      [exprpt-r (id)
+          (and (member id (car occurs)) result)]
+      [contpt-r (sym)
+          result])))
 
   ; [listpt (carpt syntax-pattern?) (cdrpt syntax-pattern?)]
   ; [multpt (eachpt syntax-pattern?) (endpt syntax-pattern?)]

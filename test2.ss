@@ -25,8 +25,13 @@
 
 (define r2
 	(parse-result-pattern
-		'(ok () b1 b2 ... . end)
+		'(ok () b1 b2 ... end)
 		'(b1 b2 end)))
 
-; (define r2R
-; 	(assembleResult r2 r2Matches '()))
+(define r2
+	(findMultIndex r2
+		'((b1 end)
+		  ((b2) )  )))
+
+(define r2R
+	(assembleResult r2 r2Matches '()))
