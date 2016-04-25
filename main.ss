@@ -25,43 +25,6 @@
 
 ; parsed expression
 
-
-; (define-datatype expression expression?
-;   [var-exp (id symbol?)]
-;   [lit-exp
-;        (datum (lambda (x)
-;           (ormap 
-;            (lambda (pred) (pred x))
-;            (list number? vector? boolean? symbol? string? pair? null?))))]
-;   [app-exp (rator expression?)
-;       (rands (list-of expression?))]
-;   [app-sym-exp (ratorSym symbol?)
-;       (rands (list-of expression?))]
-;   [lambda-exp (vars (implist-of symbol?))
-;       (body (list-of expression?))]
-;   [set!-exp (var symbol?)
-;       (val expression?)]
-;   [if-exp
-;       (two-armed? boolean?)
-;       (test expression?)
-;       (then-op expression?)
-;       (else-op (or-pred null? expression?))]
-;   [let-exp (lettype (lambda(x)(or (eq? x 'let)(eq? x 'letrec)(eq? x 'let*)(eq? x 'letrec*))))
-;       (vars-ls (list-of (lambda(y)(and (symbol? (car y))(expression? (cdr y))))))
-;       (body (list-of expression?))]
-;   [let-named-exp (name symbol?)
-;       (vars-ls (list-of (lambda(y)(and (symbol? (car y))(expression? (cdr y))))))
-;       (body (list-of expression?))]
-;   [quote-exp 
-;         (datum (lambda (x)
-;           (ormap 
-;            (lambda (pred) (pred x))
-;            (list number? vector? boolean? symbol? string? pair? null?))))]
-;   [begin-exp (body (list-of expression?))]
-;   [and-exp (body (list-of expression?))]
-;   [or-exp (body (list-of expression?))]
-;   )
-
 (define-datatype syntaxType syntaxType?
   [patternSyntax 
     (syntaxList (list-of (lambda(x) 
@@ -92,7 +55,7 @@
   [define-cexp (var symbol?)
       (val cexpression?)])
 
-;; environment type definitions
+; environment type definitions
 (define-datatype environment environment?
   (empty-env-record)
   (extended-env-record
@@ -102,7 +65,6 @@
 
 ; datatype for procedures.  At first there is only one
 ; kind of procedure, but more kinds will be added later.
-
 (define-datatype proc-val proc-val?
   [prim-proc
    (name symbol?)]
@@ -111,6 +73,83 @@
       (env environment?)])
    
 
+
+
+;-------------------+
+;                   |
+;   ENVIRONMENTS    |
+;                   |
+;-------------------+
+
+; Environment definitions for CSSE 304 Scheme interpreter.  Based on EoPL section 2.3
+(define empty-env
+  (lambda ()
+    (empty-env-record)))
+
+(define extend-env
+  (lambda (syms vals env)
+    (extended-env-record syms vals env)))
+
+(define list-find-position
+  (lambda (sym los)
+    (list-index (lambda (xsym) (eqv? sym xsym)) los)))
+
+(define list-index
+  (lambda (pred ls)
+    (cond
+     ((null? ls) #f)
+     ((pred (car ls)) 0)
+     (else (let ((list-index-r (list-index pred (cdr ls))))
+       (if (number? list-index-r)
+     (+ 1 list-index-r)
+     #f))))))
+
+(define apply-env
+  (lambda (env sym succeed fail) ; succeed and fail are procedures applied if the var is or isn't found, respectively.
+    (cases environment env
+      (empty-env-record ()
+        (fail))
+      (extended-env-record (syms vals env)
+        (let ((pos (list-find-position sym syms)))
+          (if (number? pos)
+            (succeed (list-ref vals pos))
+            (apply-env env sym succeed fail)))))))
+
+(define add-to-env!
+  (lambda (env sym val)
+    (cases environment env
+      (empty-env-record () (void))
+      (extended-env-record (syms vals env)
+        (add-to-end-of-list! syms sym)
+        (add-to-end-of-list! vals val)))))
+
+(define change-env!
+  (lambda (env sym val)
+    (cases environment env
+      (empty-env-record () (change-env! global-env sym val)) ; At top level
+      (extended-env-record (syms vals encl_env)
+        (let ((pos (list-find-position sym syms)))
+          (if (number? pos)
+            (list-set-at-index! vals pos val) ; Value is found
+            (cases environment encl_env ; Value is NOT found
+              (extended-env-record (lsyms lvals lenv)
+                (change-env! encl_env sym val))
+              (empty-env-record () ; Doesn't gurantee in global environment
+                (if (eq? env global-env)
+                    (add-to-env! env sym val)
+                    (change-env! encl_env sym val))))
+            ))))))
+
+(define define-in-env!
+  (lambda (env sym val)
+    (cases environment env
+      (empty-env-record () (define-in-env! global-env sym val)) ; At top level
+      (extended-env-record (syms vals encl_env)
+        (let ((pos (list-find-position sym syms)))
+          (if (number? pos)
+            (list-set-at-index! vals pos val) ; Value is found
+            (add-to-env! env sym val) ; We don't care if it is in global; if it's not found in the current scope, it just needs to be added.
+            ))))))
 
 
 ;-------------------+
@@ -153,8 +192,7 @@
 ; Zero error-checking for now
 (define apply-syntax
   (lambda (syntax exp env)
-    (let ([body (cdr exp)]
-      [curlev-parse (lambda (exp) (parse-exp exp env))])
+    (let ([body (cdr exp)][curlev-parse (lambda (exp) (parse-exp exp env))])
       (cases syntaxType syntax
         [patternSyntax (syntaxList)
           (curlev-parse
@@ -190,39 +228,6 @@
         [primitiveSyntax (sym)
           (curlev-parse
             (case sym
-              ; [(let)
-              ;   (if (symbol? (car body))
-              ;     ; (let loop ([a v1] [b v2]) body) -> (let ([loop (lambda (a b) body)]) (loop a b))
-              ;     ; Named Let
-              ;     (let ([name (car body)]
-              ;           [vars (map car (cadr body))]
-              ;           [vals (map cadr (cadr body))]
-              ;           [bodies (cddr body)])
-              ;       (list 'letrec
-              ;         (list (list name (cons* 'lambda vars bodies)))
-              ;         (cons name vals)))
-              ;     ; Reguler Let
-              ;     (cons (cons* 'lambda (map car (car body)) (cdr body))
-              ;       (map cadr (car body))))]
-              ; [(let*)
-              ;   (if (or (null? (cdar body)) (null? (car body)))
-              ;       (cons 'let body)
-              ;       (list 'let (list (caar body))
-              ;             (cons* 'let* (cdar body) (cdr body))))]
-              ; [(letrec)
-              ;   (let ([vars (map car (car body))]
-              ;         [exps (map cadr (car body))]
-              ;         [bodies (cdr body)]
-              ;         [newSym (create-symbol-counter)])
-              ;     (list 'let
-              ;           (map (lambda (var) (list var #f)) vars)
-              ;           (append (list 'let (map (lambda (exp) (list (newSym) exp)) exps))
-              ;             (let ([newSym (create-symbol-counter)])
-              ;               (map (lambda (var) (list 'set! var (newSym))) vars))
-              ;             (list (cons* 'let '() bodies)))))]
-              ; [(letrec*) (eopl:error 'eval-exp "Not implemented")]
-              ; [(begin)
-              ;   (list (cons* 'lambda '() body))]
               [(and)
                 (cond
                   [(null? body) #t]
@@ -261,89 +266,14 @@
           ]))))
 
 
-
-;-------------------+
-;                   |
-;   ENVIRONMENTS    |
-;                   |
-;-------------------+
-
-; Environment definitions for CSSE 304 Scheme interpreter.  Based on EoPL section 2.3
-(define empty-env
-  (lambda ()
-    (empty-env-record)))
-
-(define extend-env
-  (lambda (syms vals env)
-    (extended-env-record syms vals env)))
-
-(define list-find-position
-  (lambda (sym los)
-    (list-index (lambda (xsym) (eqv? sym xsym)) los)))
-
-(define list-index
-  (lambda (pred ls)
-    (cond
-     ((null? ls) #f)
-     ((pred (car ls)) 0)
-     (else (let ((list-index-r (list-index pred (cdr ls))))
-	     (if (number? list-index-r)
-		 (+ 1 list-index-r)
-		 #f))))))
-
-(define apply-env
-  (lambda (env sym succeed fail) ; succeed and fail are procedures applied if the var is or isn't found, respectively.
-    (cases environment env
-      (empty-env-record ()
-        (fail))
-      (extended-env-record (syms vals env)
-    	  (let ((pos (list-find-position sym syms)))
-        	(if (number? pos)
-    	      (succeed (list-ref vals pos))
-    	      (apply-env env sym succeed fail)))))))
-
-(define add-to-env!
-  (lambda (env sym val)
-    (cases environment env
-      (empty-env-record () (void))
-      (extended-env-record (syms vals env)
-        (add-to-end-of-list! syms sym)
-        (add-to-end-of-list! vals val)))))
-
-(define change-env!
-  (lambda (env sym val)
-    (cases environment env
-      (empty-env-record () (change-env! global-env sym val)) ; At top level
-      (extended-env-record (syms vals encl_env)
-        (let ((pos (list-find-position sym syms)))
-          (if (number? pos)
-            (list-set-at-index! vals pos val) ; Value is found
-            (cases environment encl_env ; Value is NOT found
-              (extended-env-record (lsyms lvals lenv)
-                (change-env! encl_env sym val))
-              (empty-env-record () ; Doesn't gurantee in global environment
-                (if (eq? env global-env)
-                    (add-to-env! env sym val)
-                    (change-env! encl_env sym val))))
-            ))))))
-
-(define define-in-env!
-  (lambda (env sym val)
-    (cases environment env
-      (empty-env-record () (define-in-env! global-env sym val)) ; At top level
-      (extended-env-record (syms vals encl_env)
-        (let ((pos (list-find-position sym syms)))
-          (if (number? pos)
-            (list-set-at-index! vals pos val) ; Value is found
-            (add-to-env! env sym val) ; We don't care if it is in global; if it's not found in the current scope, it just needs to be added.
-            ))))))
-
 ;-----------------------+
 ;                       |
 ;   SYNTAX EXPANSION    |
 ;                       |
 ;-----------------------+
 (define *prim-syntax-names* '(and or cond case while))
+
+
 
 ; To be added with define-syntax
 (define global-syntax-env 
@@ -508,6 +438,15 @@
       (empty-env))))
 
 
+(eval-one-exp
+  '(define-syntax let
+      (syntax-rules ()
+        [(_ ([x v] ...) e1 e2 ...)
+            ((lambda (x ...) e1 e2 ...) v ...)]
+        [(_ name ([x v] ...) e1 e2 ...)
+            (letrec ([name (lambda (x ...) e1 e2 ...)])
+              (name v ...))])))
+
 
 ;-------------------+
 ;                   |
@@ -600,10 +539,9 @@
             (begin (eval-exp (car code) env)
               (lambdaEval (cdr code) env))))]
       ; You will add other cases
-      [else (eopl:error 'apply-proc
-                   "Attempt to apply bad procedure: ~s" 
-                    proc-value)])))
-  
+      [else (eopl:error 'apply-proc "Attempt to apply bad procedure: ~s" proc-value)])))
+
+
 (define *prim-proc-names* '(apply map + - * / add1 sub1 zero? not = < > <= >= cons list null? assq eq?
                             eqv? equal? atom? car caar caaar caadr cadar cdaar caddr cdadr cddar cdddr
                             cadr cdar cddr cdr length list->vector list? pair? procedure? vector->list
@@ -617,9 +555,9 @@
           *prim-proc-names*)
      (empty-env)))
 
+
 ; Usually an interpreter must define each 
 ; built-in procedure individually.  We are "cheating" a little bit.
-
 (define apply-prim-proc
   (lambda (prim-proc args)
     (case prim-proc
