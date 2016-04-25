@@ -29,13 +29,61 @@
 ;                   |
 ;-------------------+
 
+
+
+
+(define eval-define-syntax
+  (let ([define-syntax-pattern
+          (listpt 
+            (sympt 'keyword)
+            (listpt 
+              (listpt
+                (contpt 'syntax-rules)
+                (listpt
+                  (multpt (exprpt 'const) (emptpt))
+                  (listpt
+                    (listpt
+                        (listpt
+                          (wildpt)
+                          (exprpt 'pattern1))
+                        (listpt
+                          (exprpt 'result1)
+                          (emptpt)))
+                    (multpt (listpt
+                                (listpt
+                                  (wildpt)
+                                  (exprpt 'pattern2))
+                                (listpt
+                                  (exprpt 'result2)
+                                  (emptpt)))
+                    (emptpt)))))
+              (emptpt)))]
+        [define-syntax-result
+          (listpt-r (list
+            (exprpt-r 'keyword)
+            (listpt-r (list (multpt-r 1 (exprpt-r 'const))))
+            (listpt-r (cons (exprpt-r 'pattern1)
+                            (exprpt-r 'result1)))
+            (multpt-r 2 (listpt-r (cons (exprpt-r 'pattern2)
+                                        (exprpt-r 'result2))))))])
+      (lambda (form)
+        (let ([try (matchRule define-syntax-pattern define-syntax-result form)])
+            (if (not try)
+              (eopl:error 'eval-define-syntax "Invalid define-syntax format ~s" (cons 'define-syntax form)))
+            (let ([keyword (car try)][constantls (cadr try)][rulesls (cddr try)])
+              (map (lambda (x) (parse-syntax-result-pair (car x)(cdr x) constantls)) rulesls)
+              )
+            ))))
+
+
+
 (define parse-syntax-result-pair
-  (lambda (syntax result constantls body)
+  (lambda (syntax result constantls)
     (let* ([parsed-syntax (parse-syntax-pattern syntax constantls)]
           [occurs (occurs-syntax-pattern parsed-syntax)]
           [parsed-result (parse-result-pattern result occurs)]
-          [indexed-result (findMultIndex parsed-result occurs)])
-      (matchRule parsed-syntax indexed-result body))))
+          [parsed-result-indexed (findMultIndex parsed-result occurs)])
+      (cons parsed-syntax parsed-result-indexed))))
 
 
 (define parse-syntax-pattern
@@ -62,6 +110,7 @@
               (listpt (parseLoop (car pat)) 
                 (parseLoop (cdr pat))))]
           [else (eopl:error 'parseLoop "Invalid sytax pattern ~s" pat)])))))
+
 
 (define occurs-syntax-pattern
   (lambda (pattern)
@@ -122,6 +171,7 @@
               (listpt-r (cdr parsed)))]
           [else (eopl:error 'parse-result-pattern "Invalid pattern ~s" pat)])))))
 
+
 (define findMultIndex
   (lambda (result occurs)
     (cases result-pattern result
@@ -139,6 +189,7 @@
           (and (member id (car occurs)) result)]
       [contpt-r (sym)
           result])))
+
 
   ; [listpt (carpt syntax-pattern?) (cdrpt syntax-pattern?)]
   ; [multpt (eachpt syntax-pattern?) (endpt syntax-pattern?)]

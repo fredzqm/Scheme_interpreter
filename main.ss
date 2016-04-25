@@ -522,8 +522,8 @@
 (define top-level-eval
   (lambda (form)
     (cond
-      ; [(and (pair? form)(eq? (car form) 'define-syntax)
-        ; (define-syntax (cdr form)))]
+      [(and (pair? form)(eq? (car form) 'define-syntax)
+        (eval-define-syntax (cdr form)))]
       [else (eval-exp (parse-exp form (empty-env)) (empty-env))])))
 
 ; eval-exp is the main component of the interpreter
