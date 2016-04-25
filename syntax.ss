@@ -9,9 +9,8 @@
   )
 
 (define-datatype result-pattern result-pattern?
-  [listpt-r (pts (list-of result-pattern?))]
+  [listpt-r (pts (implist-of result-pattern?))]
   [multpt-r (i number?) (eachrpt result-pattern?)]
-  [endpt-r (pt result-pattern?)]
   [exprpt-r (id symbol?)]
   [contpt-r (sym (lambda(x) #t))]
   )
@@ -59,7 +58,7 @@
           (let loop ([pat pat])
             (cond 
               [(null? pat) '(0)]
-              [(not (pair? pat)) (list 0 (endpt-r (parse-result-pattern pat)))] ; improper list
+              [(not (pair? pat)) (cons 0 (parse-result-pattern pat))] ; improper list
               [(eq? (car pat) '...)
                 (let ([rest (loop (cdr pat))])
                   (cons (+ 1 (car rest)) (cdr rest)))]
@@ -85,144 +84,113 @@
   ; [wildpt]
   ; [emptpt]
 
-(case result-pattern result
-  [listpt-r (pts)
-    ]
-  [multpt-r (i) (eachrpt)
-    ]
-  [endpt-r (pt)
-    ]
-  [exprpt-r (id)
-    ]
-  [contpt-r (sym)
-    ])
-
 ; return #f is never going to match
 ; return #t is sometime going to match
 ; return an alist of matches if always going to match
-(define resultMatchPattern
-  (lambda (result pattern)
-    (let )
-      (cases syntax-pattern pattern
-        [listpt (carpt cdrpt)
-          (case result-pattern result
-            [listpt-r (pts)
-              ]
-            [multpt-r (i) (eachrpt)
-              ]
-            [endpt-r (pt)
-              ]
-            [exprpt-r (id)
-              ]
-            [contpt-r (sym)
-              ])
-          ]
-      ; [listpt (carpt cdrpt)
-      ;   (and (pair? body)
-      ;     (let ([carMatch (matchpattern carpt (car body))]
-      ;           [cdrMatch (matchpattern cdrpt (cdr body))])
-      ;       (and carMatch cdrMatch
-      ;         (cons (append (car carMatch)(car cdrMatch))
-      ;           (append (cdr carMatch)(cdr cdrMatch))))))]
-        [multpt (eachpt endpt)
-          (case result-pattern result
-            [listpt-r (pts)
-              ]
-            [multpt-r (i) (eachrpt)
-              ]
-            [endpt-r (pt)
-              ]
-            [exprpt-r (id)
-              ]
-            [contpt-r (sym)
-              ])
-          ]
-      ; [multpt (eachpt endpt)
-      ;   (let loop ([body body][matchls '()])
-      ;     (or 
-      ;       (and (pair? body)
-      ;         (let ([eachMatch (matchpattern eachpt (car body))])
-      ;           (and eachMatch
-      ;             (loop (cdr body) (append matchls (list eachMatch))))))
-      ;       (let ([endMatch (matchpattern endpt body)])
-      ;         (and endMatch
-      ;           (cons (car endMatch)
-      ;             (cons matchls (cdr endMatch)))))))]
-        [sympt (id)
-          (case result-pattern result
-            [listpt-r (pts)
-              ]
-            [multpt-r (i) (eachrpt)
-              ]
-            [endpt-r (pt)
-              ]
-            [exprpt-r (id)
-              ]
-            [contpt-r (sym)
-              ])
-          ]
-      ; [sympt (id)
-      ;   (and (symbol? body)
-      ;     (list (list (cons id body))))]
-        [exprpt (id)
-          (case result-pattern result
-            [listpt-r (pts)
-              ]
-            [multpt-r (i) (eachrpt)
-              ]
-            [endpt-r (pt)
-              ]
-            [exprpt-r (id)
-              ]
-            [contpt-r (sym)
-              ])
-          ]
-      ; [exprpt (id)
-      ;   (list (list (cons id body)))]
-        [contpt (sym)
-          (case result-pattern result
-            [listpt-r (pts)
-              ]
-            [multpt-r (i) (eachrpt)
-              ]
-            [endpt-r (pt)
-              ]
-            [exprpt-r (id)
-              ]
-            [contpt-r (sym)
-              ])
-          ]
-      ; [contpt (sym) (and (eq? sym body) (list '()))]
-        [wildpt ()
-          (case result-pattern result
-            [listpt-r (pts)
-              ]
-            [multpt-r (i) (eachrpt)
-              ]
-            [endpt-r (pt)
-              ]
-            [exprpt-r (id)
-              ]
-            [contpt-r (sym)
-              ])
-          ]
-      ; [wildpt () (list '())]
-        [emptpt ()
-          (case result-pattern result
-            [listpt-r (pts)
-              ]
-            [multpt-r (i) (eachrpt)
-              ]
-            [endpt-r (pt)
-              ]
-            [exprpt-r (id)
-              ]
-            [contpt-r (sym)
-              ])
-          ]
-      ; [emptpt ()(and (null? body) (list '()))])))
-        )
-    ))
+; (define resultMatchPattern
+;   (lambda (result pattern)
+;       (cases syntax-pattern pattern
+;         [listpt (carpt cdrpt)
+;           (case result-pattern result
+;             [listpt-r (pts)
+;               ]
+;             [multpt-r (i) (eachrpt)
+;               ]
+;             [exprpt-r (id)
+;               ]
+;             [contpt-r (sym)
+;               ]
+;             [else #f])
+;           ]
+;       ; [listpt (carpt cdrpt)
+;       ;   (and (pair? body)
+;       ;     (let ([carMatch (matchpattern carpt (car body))]
+;       ;           [cdrMatch (matchpattern cdrpt (cdr body))])
+;       ;       (and carMatch cdrMatch
+;       ;         (cons (append (car carMatch)(car cdrMatch))
+;       ;           (append (cdr carMatch)(cdr cdrMatch))))))]
+;         [multpt (eachpt endpt)
+;           (case result-pattern result
+;             [listpt-r (pts)
+;               ]
+;             [multpt-r (i) (eachrpt)
+;               ]
+;             [exprpt-r (id)
+;               ]
+;             [contpt-r (sym)
+;               ]
+;             [else #f])
+;           ]
+;       ; [multpt (eachpt endpt)
+;       ;   (let loop ([body body][matchls '()])
+;       ;     (or 
+;       ;       (and (pair? body)
+;       ;         (let ([eachMatch (matchpattern eachpt (car body))])
+;       ;           (and eachMatch
+;       ;             (loop (cdr body) (append matchls (list eachMatch))))))
+;       ;       (let ([endMatch (matchpattern endpt body)])
+;       ;         (and endMatch
+;       ;           (cons (car endMatch)
+;       ;             (cons matchls (cdr endMatch)))))))]
+;         [sympt (id)
+;           (case result-pattern result
+;             [listpt-r (pts)
+;               ]
+;             [multpt-r (i) (eachrpt)
+;               ]
+;             [exprpt-r (id)
+;               ]
+;             [contpt-r (sym)
+;               ]
+;             [else #f])
+;           ]
+;       ; [sympt (id)
+;       ;   (and (symbol? body)
+;       ;     (list (list (cons id body))))]
+;         [exprpt (id)
+;           (case result-pattern result
+;             [listpt-r (pts)
+;               ]
+;             [multpt-r (i) (eachrpt)
+;               ]
+;             [exprpt-r (id)
+;               ]
+;             [contpt-r (sym)
+;               ]
+;             [else #f])
+;           ]
+;       ; [exprpt (id)
+;       ;   (list (list (cons id body)))]
+;         [contpt (sym)
+;           (case result-pattern result
+;             [listpt-r (pts)
+;               (cond [(null? pts) #f]
+;                 [])
+;               ]
+;             [multpt-r (i) (eachrpt)
+;               ]
+;             [exprpt-r (id)
+;               ]
+;             [contpt-r (sym)
+;               ]
+;             [else #f])
+;           ]
+;       ; [contpt (sym) (and (eq? sym body) (list '()))]
+;         [wildpt ()
+;           (list '())
+;           ]
+;       ; [wildpt () (list '())]
+;         [emptpt ()
+;           (case result-pattern result
+;             [listpt-r (pts)
+;               (and (null? pts) (list '()))]
+;             [multpt-r (i) (eachrpt)
+;               #t]
+;             [else #f])
+;           ]
+;       ; [emptpt ()(and (null? body) (list '()))])))
+;         )
+;     ))
 
 
 
@@ -242,7 +210,7 @@
 (define matchRule
   (lambda (pattern result body)
     (let ([matches (matchpattern pattern body)])
-      (and matches (assembleResult (endpt-r result) matches '())))))
+      (and matches (car (assembleResult result matches '()))))))
 
 (define matchpattern
   (lambda (pattern body)
@@ -279,15 +247,18 @@
   (lambda (result matches end)
     (cases result-pattern result
       [listpt-r (pts)
-          (cons (fold-right (lambda (pt end)
-                        (assembleResult pt matches end))
-            '() pts) end)]
+          (cons 
+            (let loop ([pts pts])
+              (cond
+                [(null? pts)  '()]
+                [(result-pattern? pts)
+                  (car (assembleResult pts matches '()))]
+                [else (assembleResult (car pts) matches (loop (cdr pts)))]))
+            end)]
       [multpt-r (i eachrpt)
           (fold-right (lambda (match end)
                         (assembleResult eachrpt match end))
             end (list-ref matches i))]
-      [endpt-r (pt)
-          (car (assembleResult pt matches '()))]
       [exprpt-r (id)
           (cons (cdr (assoc id (car matches))) end)]
       [contpt-r (sym)

@@ -17,7 +17,7 @@
 
 (define r2
 	(parse-result-pattern
-		'(let () b1 b2 ... . end)
+		'(() b1 b2 ... . end)
 		))
 
 (define r2R

@@ -8,6 +8,12 @@
         '()
         (cons (proc (car ls)) (map proc (cdr ls))))))
 
+(define (implist-of pred?)
+  (lambda(implst)
+    (let helper ([ls implst])
+      (or (null? ls) (pred? ls)
+        (and (pred? (car ls)) (helper (cdr ls)))))))
+
 (load "chez-init.ss") 
 (load "syntax.ss")
 
@@ -716,11 +722,7 @@
         (list vars)))])
   loop))
 
-(define (implist-of pred?)
-  (lambda(implst)
-    (let helper ([ls implst])
-      (or (null? ls) (pred? ls)
-        (and (pred? (car ls)) (helper (cdr ls)))))))
+
 
 (define list-set-at-index!
   (lambda (ls ind val)
