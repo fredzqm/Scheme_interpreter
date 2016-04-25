@@ -16,7 +16,12 @@
   )
 
 
-
+(define slist-contain
+  (lambda (slist x)
+    (if (pair? slist)
+      (or (slist-contain (car slist) x)
+        (slist-contain (cdr slist) x))
+      (eq? x slist))))
 
 ;-------------------+
 ;                   |
@@ -24,56 +29,98 @@
 ;                   |
 ;-------------------+
 
+; (define parse-syntax-result-pair
+;   (lambda (syntax result constantls)
+;     (let* ([parsed-syntax (parse-syntax-pattern syntax constantls)]
+;           [occurs (occurs-syntax-pattern parsed-syntax)]
+;           [parsed-result (parse-result-pattern result occurs)])
+;       )
+;     ))
+
+
 (define parse-syntax-pattern
-  (lambda (pat)
-    (cond
-      [(null? pat)
-        (emptpt)]
-      [(symbol? pat)
-        (case pat
-         [(...) (eopl:error 'parse-syntax-pattern "improper use of ...")] ; to signal ...
-         [(_) (wildpt)]
-         [else (exprpt pat)])]
-      [(pair? pat)
-        (if (and (pair? (cdr pat))(eq? '... (cadr pat)))
-          (multpt (parse-syntax-pattern (car pat)) 
-            (parse-syntax-pattern (cddr pat)))
-          (listpt (parse-syntax-pattern (car pat)) 
-            (parse-syntax-pattern (cdr pat))))]
-      [else (eopl:error 'parse-syntax-pattern "Invalid sytax pattern ~s" pat)])))
+  (lambda (pat constantls)
+    (let ([symls '()])
+      (let parseLoop ([pat pat])
+        (cond
+          [(null? pat)
+            (emptpt)]
+          [(symbol? pat)
+            (cond
+             [(eq? pat '...) (eopl:error 'parse-syntax-pattern "improper use of ...")] ; to signal ...
+             [(eq? pat '_) (wildpt)]
+             [(member pat constantls) (contpt pat)]
+             [else 
+                (if (member pat symls)
+                  (eopl:error 'parse-syntax-pattern "repeated pattern name: ~s" pat)
+                  (set! symls (cons pat symls)))
+                (exprpt pat)])]
+          [(pair? pat)
+            (if (and (pair? (cdr pat))(eq? '... (cadr pat)))
+              (multpt (parseLoop (car pat)) 
+                (parseLoop (cddr pat)))
+              (listpt (parseLoop (car pat)) 
+                (parseLoop (cdr pat))))]
+          [else (eopl:error 'parseLoop "Invalid sytax pattern ~s" pat)])))))
+
+(define occurs-syntax-pattern
+  (lambda (pattern)
+    (cases syntax-pattern pattern
+      [listpt (carpt cdrpt)
+        (let ([carOccur (occurs-syntax-pattern carpt)]
+              [cdrOccur (occurs-syntax-pattern cdrpt)])
+          (cons (append (car carOccur)(car cdrOccur))
+            (append (cdr carOccur)(cdr cdrOccur))))]
+      [multpt (eachpt endpt)
+        (let ([eachOccur (occurs-syntax-pattern eachpt)]
+              [endOcuur (occurs-syntax-pattern endpt)])
+            (cons (car endOcuur)
+              (cons eachOccur (cdr endOcuur))))]
+      [sympt (id)
+        (list (list id))]
+      [exprpt (id)
+        (list (list id))]
+      [contpt (sym) (list '())]
+      [wildpt () (list '())]
+      [emptpt () (list '())])))
 
 
 (define parse-result-pattern
-  (lambda (pat)
-    (cond
-      [(symbol? pat)
-        (case pat
-         [(...) (eopl:error 'parse-result-pattern "improper use of ...")] ; to signal ...
-         [(_) (eopl:error 'parse-result-pattern "improper use of _")]
-         [else (exprpt-r pat)])]
-      [(null? pat)
-        (listpt-r '())]
-      [(pair? pat)
-        (let ([parsed
-          (let loop ([pat pat])
-            (cond 
-              [(null? pat) '(0)]
-              [(not (pair? pat)) (cons 0 (parse-result-pattern pat))] ; improper list
-              [(eq? (car pat) '...)
-                (let ([rest (loop (cdr pat))])
-                  (cons (+ 1 (car rest)) (cdr rest)))]
-              [else (let ([pat (parse-result-pattern (car pat))]
-                          [rest (loop (cdr pat))])
-                (let loop2 ([pat pat]
-                            [multOrder (car rest)]
-                            [end (cdr rest)])
-                  (if (= 0 multOrder) 
-                    (cons* 0 pat end)
-                    (loop2 (multpt-r 0 pat) (- multOrder 1) end))))]))])
-          (if (not (= 0 (car parsed)))
-            (eopl:error 'parse-result-pattern "... is not matched to symbol ~s" pat))
-          (listpt-r (cdr parsed)))]
-      [else (eopl:error 'parse-result-pattern "Invalid pattern ~s" pat)])))
+  (lambda (pat occurs)
+    (let ([const? (lambda(x) 
+                    (not (slist-contain occurs x)))])
+      (let parseLoop ([pat pat])
+        (cond
+          [(symbol? pat)
+            (case pat
+             [(...) (eopl:error 'parse-result-pattern "improper use of ...")] ; to signal ...
+             [(_) (eopl:error 'parse-result-pattern "improper use of _")]
+             [else (if (const? pat)
+                      (contpt-r pat)
+                      (exprpt-r pat))])]
+          [(null? pat)
+            (listpt-r '())]
+          [(pair? pat)
+            (let ([parsed
+              (let loop ([pat pat])
+                (cond 
+                  [(null? pat) '(0)]
+                  [(not (pair? pat)) (cons 0 (parseLoop pat))] ; improper list
+                  [(eq? (car pat) '...)
+                    (let ([rest (loop (cdr pat))])
+                      (cons (+ 1 (car rest)) (cdr rest)))]
+                  [else (let ([pat (parseLoop (car pat))]
+                              [rest (loop (cdr pat))])
+                    (let loop2 ([pat pat]
+                                [multOrder (car rest)]
+                                [end (cdr rest)])
+                      (if (= 0 multOrder) 
+                        (cons* 0 pat end)
+                        (loop2 (multpt-r 0 pat) (- multOrder 1) end))))]))])
+              (if (not (= 0 (car parsed)))
+                (eopl:error 'parse-result-pattern "... is not matched to symbol ~s" pat))
+              (listpt-r (cdr parsed)))]
+          [else (eopl:error 'parse-result-pattern "Invalid pattern ~s" pat)])))))
 
 
   ; [listpt (carpt syntax-pattern?) (cdrpt syntax-pattern?)]
@@ -94,7 +141,7 @@
 ;           (case result-pattern result
 ;             [listpt-r (pts)
 ;               ]
-;             [multpt-r (i) (eachrpt)
+;             [multpt-r (i eachrpt)
 ;               ]
 ;             [exprpt-r (id)
 ;               ]
@@ -113,7 +160,7 @@
 ;           (case result-pattern result
 ;             [listpt-r (pts)
 ;               ]
-;             [multpt-r (i) (eachrpt)
+;             [multpt-r (i eachrpt)
 ;               ]
 ;             [exprpt-r (id)
 ;               ]
@@ -135,59 +182,46 @@
 ;         [sympt (id)
 ;           (case result-pattern result
 ;             [listpt-r (pts)
-;               ]
-;             [multpt-r (i) (eachrpt)
-;               ]
+;               (and (result-pattern? pts) ; awere of improper list
+;                 (resultMatchPattern pts pattern) #t)]
+;             [multpt-r (i eachrpt)
+;               (and (resultMatchPattern eachrpt pattern) #t)]
 ;             [exprpt-r (id)
-;               ]
+;               #t]
 ;             [contpt-r (sym)
-;               ]
+;               #t]
 ;             [else #f])
 ;           ]
 ;       ; [sympt (id)
 ;       ;   (and (symbol? body)
 ;       ;     (list (list (cons id body))))]
 ;         [exprpt (id)
-;           (case result-pattern result
-;             [listpt-r (pts)
-;               ]
-;             [multpt-r (i) (eachrpt)
-;               ]
-;             [exprpt-r (id)
-;               ]
-;             [contpt-r (sym)
-;               ]
-;             [else #f])
-;           ]
+;           (list (cons id result))]
 ;       ; [exprpt (id)
 ;       ;   (list (list (cons id body)))]
 ;         [contpt (sym)
 ;           (case result-pattern result
 ;             [listpt-r (pts)
-;               (cond [(null? pts) #f]
-;                 [])
-;               ]
-;             [multpt-r (i) (eachrpt)
-;               ]
+;               (and (result-pattern? pts) ; awere of improper list
+;                 (resultMatchPattern pts pattern) #t)]
+;             [multpt-r (i eachrpt)
+;               (and (resultMatchPattern eachrpt pattern) #t)]
 ;             [exprpt-r (id)
-;               ]
-;             [contpt-r (sym)
-;               ]
-;             [else #f])
-;           ]
+;               #t]
+;             [contpt-r (sym-r)
+;               (and (eq? sym sym-r) (list '()))]
+;             [else #f])]
 ;       ; [contpt (sym) (and (eq? sym body) (list '()))]
 ;         [wildpt ()
-;           (list '())
-;           ]
+;           (list '())]
 ;       ; [wildpt () (list '())]
 ;         [emptpt ()
 ;           (case result-pattern result
 ;             [listpt-r (pts)
 ;               (and (null? pts) (list '()))]
-;             [multpt-r (i) (eachrpt)
+;             [multpt-r (i eachrpt)
 ;               #t]
-;             [else #f])
-;           ]
+;             [else #f])]
 ;       ; [emptpt ()(and (null? body) (list '()))])))
 ;         )
 ;     ))
