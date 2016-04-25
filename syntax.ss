@@ -11,6 +11,7 @@
 (define-datatype result-pattern result-pattern?
   [listpt-r (pts (list-of result-pattern?))]
   [multpt-r (i number?) (eachrpt result-pattern?)]
+  [endpt-r (pt result-pattern?)]
   [exprpt-r (id symbol?)]
   [contpt-r (sym (lambda(x) #t))]
   )
@@ -39,27 +40,32 @@
   (lambda (pat)
     (cond
       [(symbol? pat)
-        (if (eq? pat '...)
-          '...
-          (exprpt-r pat))]
-      [(list? pat)
+        (case pat
+         [(...) (eopl:error 'parse-result-pattern "improper use of ...")] ; to signal ...
+         [(_) (eopl:error 'parse-result-pattern "improper use of _")]
+         [else (exprpt-r pat)])]
+      [(null? pat)
+        (listpt-r '())]
+      [(pair? pat)
         (let ([parsed
           (let loop ([pat pat])
-            (if (null? pat) '(0)
-              (let ([pat (parse-result-pattern (car pat))]
-                    [rest (loop (cdr pat))])
+            (cond 
+              [(null? pat) '(0)]
+              [(not (pair? pat)) (list 0 (endpt-r (parse-result-pattern pat)))] ; improper list
+              [(eq? (car pat) '...)
+                (let ([rest (loop (cdr pat))])
+                  (cons (+ 1 (car rest)) (cdr rest)))]
+              [else (let ([pat (parse-result-pattern (car pat))]
+                          [rest (loop (cdr pat))])
                 (let loop2 ([pat pat]
                             [multOrder (car rest)]
                             [end (cdr rest)])
-                  (cond
-                    [(eq? pat '...) 
-                      (cons (+ 1 multOrder) end)]
-                    [(= 0 multOrder) 
-                      (cons* 0 pat end)]
-                    [else (loop2 (multpt-r 0 pat) (- multOrder 1) end)])))))])
-        (if (not (= 0 (car parsed)))
-          (eopl:error 'parse-result-pattern "... is not matched to symbol ~s" pat))
-        (listpt-r (cdr parsed)))]
+                  (if (= 0 multOrder) 
+                    (cons* 0 pat end)
+                    (loop2 (multpt-r 0 pat) (- multOrder 1) end))))]))])
+          (if (not (= 0 (car parsed)))
+            (eopl:error 'parse-result-pattern "... is not matched to symbol ~s" pat))
+          (listpt-r (cdr parsed)))]
       [else (eopl:error 'parse-result-pattern "Invalid pattern ~s" pat)])))
 
 
@@ -98,7 +104,7 @@
 (define matchRule
   (lambda (pattern result body)
     (let ([matches (matchpattern pattern body)])
-      (and matches (car (assembleResult result matches '()))))))
+      (and matches (assembleResult (endpt-r result) matches '())))))
 
 (define matchpattern
   (lambda (pattern body)
@@ -142,6 +148,8 @@
           (fold-right (lambda (match end)
                         (assembleResult eachrpt match end))
             end (list-ref matches i))]
+      [endpt-r (pt)
+          (car (assembleResult pt matches '()))]
       [exprpt-r (id)
           (cons (cdr (assoc id (car matches))) end)]
       [contpt-r (sym)
