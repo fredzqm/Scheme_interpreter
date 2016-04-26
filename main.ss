@@ -224,9 +224,7 @@
           (if-cexp
             (curlev-parse (car body))
             (curlev-parse (cadr body))
-            (if (null? (cddr body))
-                (lit-cexp (void))
-                (curlev-parse (caddr body))))]
+            (curlev-parse (caddr body)))]
         [(set!)
           (set!-cexp
             (car body)
@@ -421,6 +419,7 @@
       [(equal?) (apply equal? args)]
       [(atom?) (apply atom? args)]
       [(car) (apply car args)]
+      [(cdr) (apply cdr args)]
       [(caar) (apply caar args)]
       [(caaar) (apply caaar args)]
       [(caadr) (apply caadr args)]
@@ -433,7 +432,6 @@
       [(cadr) (apply cadr args)]
       [(cdar) (apply cdar args)]
       [(cddr) (apply cddr args)]
-      [(cdr) (apply cdr args)]
       [(length) (apply length args)]
       [(list->vector) (apply list->vector args)]
       [(list?) (apply list? args)]
@@ -504,3 +502,5 @@
 
 
 (load "syntaxExpansion.ss")
+(load "predefinedProcedure.ss")
+

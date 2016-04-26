@@ -93,13 +93,7 @@
         (let loop ()
           (if test (begin e1 e2 ... (loop))))])))
 
-(eval-one-exp
-  '(define member
-    (lambda (var ls)
-      (cond
-        [(null? ls) #f]
-        [(eq? var (car ls)) ls]
-        [else (member var (cdr ls))]))))
+
 
 (eval-one-exp
   '(define-syntax case
