@@ -84,6 +84,8 @@
           [occurs (occurs-syntax-pattern parsed-syntax)]
           [parsed-result (parse-result-pattern result occurs)]
           [parsed-result-indexed (findMultIndex parsed-result occurs)])
+      (if (not parsed-result-indexed)
+        (eopl:error 'findMultIndex "the multi-pattern cannot be matched correctly ~s" (list syntax result)))
       (cons parsed-syntax parsed-result-indexed))))
 
 
@@ -170,7 +172,7 @@
               (if (not (= 0 (car parsed)))
                 (eopl:error 'parse-result-pattern "... is not matched to symbol ~s" pat))
               (listpt-r (cdr parsed)))]
-          [else (eopl:error 'parse-result-pattern "Invalid pattern ~s" pat)])))))
+          [else (contpt-r pat)])))))
 
 
 (define findMultIndex
@@ -178,14 +180,16 @@
     (cases result-pattern result
       [listpt-r (pts)
         (let ([try (map (lambda(x) (findMultIndex x occurs)) pts)])
-          (and (andmap (lambda(x)x) try) (listpt-r try)))]
+          (and (andmap (lambda(x) x) try) (listpt-r try)))]
       [multpt-r (i eachrpt)
         (let ([try (let loop ([i 1][envs (cdr occurs)])
               (if (null? envs) #f ; no match found
-                (let ([match (findMultIndex eachrpt (car envs))])
-                  (if match  i
+                (let ([match (findMultIndex eachrpt 
+                                  (cons (append (car occurs) (caar envs))
+                                        (cdar envs)))])
+                  (if match  (cons i match)
                     (loop (+ i 1) (cdr envs))))))])
-          (and try (multpt-r try eachrpt)))]
+          (and try (multpt-r (car try) (cdr try))))]
       [exprpt-r (id)
           (and (member id (car occurs)) result)]
       [contpt-r (sym)
@@ -313,7 +317,9 @@
 (define matchRule
   (lambda (pattern result body)
     (let ([matches (matchpattern pattern body)])
-      (and matches (car (assembleResult result matches '()))))))
+      (and matches 
+        (let ([result (car (assembleResult result matches '()))])
+          (if result result '(quote #f)))))))
 
 (define matchpattern
   (lambda (pattern body)
@@ -343,7 +349,7 @@
         (list (list (cons id body)))]
       [contpt (sym) (and (eq? sym body) (list '()))]
       [wildpt () (list '())]
-      [emptpt ()(and (null? body) (list '()))])))
+      [emptpt () (and (null? body) (list '()))])))
 
 
 (define assembleResult
@@ -360,7 +366,9 @@
             end)]
       [multpt-r (i eachrpt)
           (fold-right (lambda (match end)
-                        (assembleResult eachrpt match end))
+                        (assembleResult eachrpt (cons (append (car matches)(car match))
+                                                      (cdr match)) 
+                            end))
             end (list-ref matches i))]
       [exprpt-r (id)
           (cons (cdr (assoc id (car matches))) end)]

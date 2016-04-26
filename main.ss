@@ -31,9 +31,7 @@
       (and (syntax-pattern? (car x))(result-pattern? (cdr x))))))]
   [coreSyntax
     (sym symbol?)
-    (validSyntax (list-of syntax-pattern?))]
-  [primitiveSyntax 
-    (sym symbol?)])
+    (validSyntax (list-of syntax-pattern?))])
 
 ; the core expression of scheme. Syntax expansion should convert all code to core scheme.
 (define-datatype cexpression cexpression?
@@ -59,7 +57,7 @@
 (define-datatype environment environment?
   (empty-env-record)
   (extended-env-record
-   (syms (list-of symbol?))
+   (syms (list-of (lambda(x) (or (not x)(symbol? x)))))
    (vals list?)
    (env environment?)))
 
@@ -88,7 +86,11 @@
 
 (define extend-env
   (lambda (syms vals env)
-    (extended-env-record syms vals env)))
+    (if (not (= (length syms)(length vals)))
+      (eopl:error 'extend-env "syms and vals has different length syms ~s vals" syms vals))
+    (if (null? syms)
+      (extended-env-record (list #f) (list #f) env)
+      (extended-env-record syms vals env))))
 
 (define list-find-position
   (lambda (sym los)
@@ -116,12 +118,19 @@
             (apply-env env sym succeed fail)))))))
 
 (define add-to-env!
-  (lambda (env sym val)
-    (cases environment env
-      (empty-env-record () (void))
-      (extended-env-record (syms vals env)
-        (add-to-end-of-list! syms sym)
-        (add-to-end-of-list! vals val)))))
+  (letrec ([helper! (lambda (ls val)
+                      (if (null? (cdr ls))
+                        (if (car ls) ; if the list is initially empty, which has a #f in it
+                          (set-cdr! ls (list val))
+                          (set-car! ls val))
+                        (helper! (cdr ls) val)))])
+    (lambda (env sym val)
+      (cases environment env
+        (empty-env-record () 
+          (eopl:error 'add-to-env! "Cannot add to the end of an empty environment"))
+        (extended-env-record (syms vals env)
+          (helper! syms sym)
+          (helper! vals val))))))
 
 (define change-env!
   (lambda (env sym val)
@@ -131,14 +140,16 @@
         (let ((pos (list-find-position sym syms)))
           (if (number? pos)
             (list-set-at-index! vals pos val) ; Value is found
-            (cases environment encl_env ; Value is NOT found
-              (extended-env-record (lsyms lvals lenv)
-                (change-env! encl_env sym val))
-              (empty-env-record () ; Doesn't gurantee in global environment
-                (if (eq? env global-env)
-                    (add-to-env! env sym val)
-                    (change-env! encl_env sym val))))
-            ))))))
+            (if (eq? env global-env)
+              (add-to-env! env sym val)
+              (change-env! encl_env sym val))))))))
+            ; (cases environment encl_env ; Value is NOT found
+            ;   (extended-env-record (lsyms lvals lenv)
+            ;     (change-env! encl_env sym val))
+            ;   (empty-env-record () ; Doesn't gurantee in global environment
+            ;     (if (eq? env global-env)
+            ;         (add-to-env! env sym val)
+            ;         (change-env! encl_env sym val))))
 
 (define define-in-env!
   (lambda (env sym val)
@@ -203,7 +214,7 @@
             (eopl:error 'parse-exp "Invalid Core Syntax ~s" exp))
           (case sym
             [(quote) 
-              (lit-cexp 
+              (lit-cexp
                 (car body))]
             [(lambda)
               (lambda-cexp 
@@ -224,46 +235,7 @@
               (define-cexp
                 (car body)
                 (curlev-parse (cadr body)))]
-            [else (eopl:error 'apply-syntax "not implemented core expression ~s" exp)])]
-        [primitiveSyntax (sym)
-          (curlev-parse
-            (case sym
-              [(and)
-                (cond
-                  [(null? body) #t]
-                  [(null? (cdr body)) (car body)]
-                  [else (list 'if (car body)
-                          (cons 'and (cdr body))
-                          #f)])]
-              [(or)
-                (cond
-                  [(null? body) #f]
-                  [(null? (cdr body)) (car body)]
-                  [else (list 'let
-                            (list (list 'val (car body)))
-                            (list 'if 'val 'val (cons 'or (cdr body))))])]
-              [(cond)
-                (if (null? (cdr body))
-                  (if (eqv? 'else (caar body))
-                    (cadar body)
-                    (app-cexp (var-cexp 'void) '()))
-                  (list 'if (caar body) (cadar body) (cons 'cond (cdr body))))]
-              [(case)
-                (let ([var (car body)]
-                      [tests (cdr body)])
-                  (list 'let (list (list 'var var))
-                    (cons 'cond
-                      (map (lambda (p)
-                              (if (eqv? 'else (car p))
-                                p
-                                (list (cons 'or (map (lambda (t) (list 'eqv? var t)) (car p))) (cadr p)))) tests))))]
-              [(while)
-                ; (while t e1 e2 ...) -> (let temp ([test t]) (if test (begin e1 e2 ... (temp t))))
-                (let ([t (car body)]
-                      [bodies (cdr body)])
-                  (list 'let 'temp (list (list 'test t)) (list 'if 'test (append '(begin) bodies (list (list 'temp t))))))])
-            )
-          ]))))
+            [else (eopl:error 'apply-syntax "not implemented core expression ~s" exp)])]))))
 
 
 ;-----------------------+
@@ -271,148 +243,15 @@
 ;   SYNTAX EXPANSION    |
 ;                       |
 ;-----------------------+
-(define *prim-syntax-names* '(and or cond case while))
+(define *prim-syntax-names* '(afeojavoeaija))
 
 
 
 ; To be added with define-syntax
 (define global-syntax-env 
-  (extend-env 
-     ; (cons 'let *prim-syntax-names*)
-    (append '(let* letrec letrec* begin) *prim-syntax-names*)
-     (cons* 
-      ; ; let
-      ; (patternSyntax (list
-      ;   (cons ; normal let
-      ;     (listpt (multpt (listpt (sympt 's) (listpt (exprpt 'v) (emptpt))) (emptpt))
-      ;       (listpt (exprpt 'b1) (multpt (exprpt 'b2) (emptpt))))
-      ;     (listpt-r (list
-      ;       (listpt-r (list 
-      ;         (contpt-r 'lambda)
-      ;         (listpt-r (list
-      ;           (multpt-r 1 (exprpt-r 's))))
-      ;         (exprpt-r 'b1)
-      ;         (multpt-r 2 (exprpt-r 'b2))
-      ;         ))
-      ;       (multpt-r 1 (exprpt-r 'v))
-      ;       )))
-      ;   (cons ; named let
-      ;     (listpt (sympt 'name)
-      ;       (listpt (multpt (listpt (sympt 's) (listpt (exprpt 'v) (emptpt))) (emptpt))
-      ;         (listpt (exprpt 'b1) (multpt (exprpt 'b2) (emptpt)))))
-      ;     (listpt-r (list
-      ;       (contpt-r 'letrec)
-      ;       (listpt-r (list
-      ;         (listpt-r (list 
-      ;           (exprpt-r 'name)
-      ;           (listpt-r (list 
-      ;             (contpt-r 'lambda)
-      ;             (listpt-r (list
-      ;               (multpt-r 1 (exprpt-r 's))))
-      ;             (exprpt-r 'b1)
-      ;             (multpt-r 2 (exprpt-r 'b2))
-      ;             ))
-      ;           ))
-      ;         ))
-      ;       (listpt-r (list
-      ;         (exprpt-r 'name)
-      ;         (multpt-r 1 (exprpt-r 'v))
-      ;         ))
-      ;       ))
-      ;   )))
-      ; [(let*)
-      ;   (if (or (null? (cdar body)) (null? (car body)))
-      ;       (cons 'let body)
-      ;       (list 'let (list (caar body))
-      ;             (cons* 'let* (cdar body) (cdr body))))]
-      (patternSyntax (list
-        (cons ; expand case
-          (listpt (listpt (listpt (sympt 's1) (listpt (exprpt 'v1) (emptpt)))
-                    (multpt (listpt (sympt 's2) (listpt (exprpt 'v2) (emptpt))) (emptpt)))
-            (listpt (exprpt 'b1) (multpt (exprpt 'b2) (emptpt))))
-          (listpt-r (list
-            (contpt-r 'let)
-            (listpt-r (list
-              (listpt-r (list
-                (exprpt-r 's1)
-                (exprpt-r 'v1)))))
-            (listpt-r (list
-              (contpt-r 'let*)
-              (listpt-r (list
-                (multpt-r 1 (listpt-r (list
-                                (exprpt-r 's2)
-                                (exprpt-r 'v2)
-                                )))))))
-              (exprpt-r 'b1)
-              (multpt-r 2 (exprpt-r 'b2)))))
-        (cons ; base case
-          (listpt (listpt (listpt (sympt 's1) (listpt (exprpt 'v1) (emptpt))) (emptpt))
-            (listpt (exprpt 'b1) (multpt (exprpt 'b2) (emptpt))))
-          (listpt-r (list
-            (contpt-r 'let)
-            (listpt-r (list
-              (listpt-r (list
-                (exprpt-r 's1)
-                (exprpt-r 'v1)))))
-            (exprpt-r 'b1)
-            (multpt-r 1 (exprpt-r 'b2)))))))
-    ; [(letrec)
-    ;   (let ([vars (map car (car body))]
-    ;         [exps (map cadr (car body))]
-    ;         [bodies (cdr body)]
-    ;         [newSym (create-symbol-counter)])
-    ;     (list 'let
-    ;           (map (lambda (var) (list var #f)) vars)
-    ;           (append (list 'let (map (lambda (exp) (list (newSym) exp)) exps))
-    ;             (let ([newSym (create-symbol-counter)])
-    ;               (map (lambda (var) (list 'set! var (newSym))) vars))
-    ;             (list (cons* 'let '() bodies)))))]
-      (patternSyntax (list
-        (cons
-          (listpt (multpt (listpt (sympt 's) (listpt (exprpt 'v) (emptpt))) (emptpt))
-            (listpt (exprpt 'b1) (multpt (exprpt 'b2) (emptpt))))
-          (listpt-r (list
-            (contpt-r 'let)
-            (listpt-r (list
-              (multpt-r 1 (listpt-r (list
-                            (exprpt-r 's)
-                            (contpt-r #f)
-                            )))))
-            (multpt-r 1 (listpt-r (list
-                            (contpt-r 'set!)
-                            (exprpt-r 's)
-                            (exprpt-r 'v))))
-            (exprpt-r 'b1)
-            (multpt-r 2 (exprpt-r 'b2)))))))
-      (patternSyntax (list
-        (cons
-          (listpt (multpt (listpt (sympt 's) (listpt (exprpt 'v) (emptpt))) (emptpt))
-            (listpt (exprpt 'b1) (multpt (exprpt 'b2) (emptpt))))
-          (listpt-r (list
-            (contpt-r 'let)
-            (listpt-r (list
-              (multpt-r 1 (listpt-r (list
-                            (exprpt-r 's)
-                            (contpt-r #f)
-                            )))))
-            (multpt-r 1 (listpt-r (list
-                            (contpt-r 'set!)
-                            (exprpt-r 's)
-                            (exprpt-r 'v))))
-            (exprpt-r 'b1)
-            (multpt-r 2 (exprpt-r 'b2)))))))
-      (patternSyntax (list
-        (cons
-          (listpt (exprpt 'a1)
-            (multpt (exprpt 'a2)(emptpt)))
-          (listpt-r (list
-            (listpt-r (list
-              (contpt-r 'lambda)
-              (listpt-r (list))
-              (exprpt-r 'a1)
-              (multpt-r 1 (exprpt-r 'a2)))))))))
-    ; (append
-      (map primitiveSyntax *prim-syntax-names*))
+  (extend-env
+    '()
+    '()
     (extend-env
       '(quote lambda if set! define)
       (list 
@@ -437,15 +276,6 @@
             (listpt (exprpt 'e) (emptpt))))))
       (empty-env))))
 
-
-(eval-one-exp
-  '(define-syntax let
-      (syntax-rules ()
-        [(_ ([x v] ...) e1 e2 ...)
-            ((lambda (x ...) e1 e2 ...) v ...)]
-        [(_ name ([x v] ...) e1 e2 ...)
-            (letrec ([name (lambda (x ...) e1 e2 ...)])
-              (name v ...))])))
 
 
 ;-------------------+
@@ -546,7 +376,7 @@
                             eqv? equal? atom? car caar caaar caadr cadar cdaar caddr cdadr cddar cdddr
                             cadr cdar cddr cdr length list->vector list? pair? procedure? vector->list
                             vector make-vector vector-ref vector? number? symbol? set-car! set-cdr!
-                            vector-set! display newline void quotient))
+                            vector-set! display newline void quotient member))
 
 (define global-env         ; for now, our initial global environment only contains 
   (extend-env            ; procedure names.  Recall that an environment associates
@@ -667,12 +497,7 @@
     (if (= 0 ind) (set-car! ls val)
       (list-set-at-index! (cdr ls) (- ind 1) val))))
 
-(define add-to-end-of-list!
-  (lambda (ls val)
-    (cond
-      [(> (length ls) 1) (add-to-end-of-list! (cdr ls) val)]
-      [(= (length ls) 1) (set-cdr! ls (list val))]
-      [else (eopl:error 'add-to-end-of-list! "1st argument is an empty list!")])))
+
 
 (define create-symbol-counter
   (lambda ()
@@ -681,3 +506,6 @@
         (let ([current count])
           (set! count (+ 1 count))
           (string->symbol (number->string current)))))))
+
+
+(load "syntaxExpansion.ss")
