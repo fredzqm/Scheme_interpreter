@@ -95,18 +95,3 @@
         (cond [(member sym (list p ...)) e] ... )]
         )))
 
-; [(cond)
-;   (if (null? (cdr body))
-;     (if (eqv? 'else (caar body))
-;       (cadar body)
-;       (app-cexp (var-cexp 'void) '()))
-;     (list 'if (caar body) (cadar body) (cons 'cond (cdr body))))]
-; [(case)
-;   (let ([var (car body)]
-;         [tests (cdr body)])
-;     (list 'let (list (list 'var var))
-;       (cons 'cond
-;         (map (lambda (p)
-;                 (if (eqv? 'else (car p))
-;                   p
-;                   (list (cons 'or (map (lambda (t) (list 'eqv? var t)) (car p))) (cadr p)))) tests))))]
