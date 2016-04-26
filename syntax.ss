@@ -178,8 +178,16 @@
   (lambda (result occurs)
     (cases result-pattern result
       [listpt-r (pts)
-        (let ([try (map (lambda(x) (findMultIndex x occurs)) pts)])
-          (and (andmap (lambda(x) x) try) (listpt-r try)))]
+        (listpt-r 
+          (let loop ([pts pts])
+            (cond
+              [(null? pts)  '()]
+              [(result-pattern? pts) (findMultIndex pts occurs)]
+              [else (let ([carpt (findMultIndex (car pts) occurs)])
+                (and carpt
+                  (let ([cdrpt (loop (cdr pts))])
+                    (and cdrpt
+                      (cons carpt cdrpt)))))])))]
       [multpt-r (i eachrpt)
         (let ([try (let loop ([i 1][envs (cdr occurs)])
               (if (null? envs) #f ; no match found
@@ -193,116 +201,6 @@
           (and (member id (car occurs)) result)]
       [contpt-r (sym)
           result])))
-
-
-  ; [listpt (carpt syntax-pattern?) (cdrpt syntax-pattern?)]
-  ; [multpt (eachpt syntax-pattern?) (endpt syntax-pattern?)]
-  ; [sympt (id symbol?)]
-  ; [exprpt (id symbol?)]
-  ; [contpt (sym symbol?)]
-  ; [wildpt]
-  ; [emptpt]
-
-; return #f is never going to match
-; return #t is sometime going to match
-; return an alist of matches if always going to match
-; (define resultMatchPattern
-;   (lambda (result pattern)
-;       (cases syntax-pattern pattern
-;         [listpt (carpt cdrpt)
-;           (case result-pattern result
-;             [listpt-r (pts)
-;               ]
-;             [multpt-r (i eachrpt)
-;               ]
-;             [exprpt-r (id)
-;               ]
-;             [contpt-r (sym)
-;               ]
-;             [else #f])
-;           ]
-;       ; [listpt (carpt cdrpt)
-;       ;   (and (pair? body)
-;       ;     (let ([carMatch (matchpattern carpt (car body))]
-;       ;           [cdrMatch (matchpattern cdrpt (cdr body))])
-;       ;       (and carMatch cdrMatch
-;       ;         (cons (append (car carMatch)(car cdrMatch))
-;       ;           (append (cdr carMatch)(cdr cdrMatch))))))]
-;         [multpt (eachpt endpt)
-;           (case result-pattern result
-;             [listpt-r (pts)
-;               ]
-;             [multpt-r (i eachrpt)
-;               ]
-;             [exprpt-r (id)
-;               ]
-;             [contpt-r (sym)
-;               ]
-;             [else #f])
-;           ]
-;       ; [multpt (eachpt endpt)
-;       ;   (let loop ([body body][matchls '()])
-;       ;     (or 
-;       ;       (and (pair? body)
-;       ;         (let ([eachMatch (matchpattern eachpt (car body))])
-;       ;           (and eachMatch
-;       ;             (loop (cdr body) (append matchls (list eachMatch))))))
-;       ;       (let ([endMatch (matchpattern endpt body)])
-;       ;         (and endMatch
-;       ;           (cons (car endMatch)
-;       ;             (cons matchls (cdr endMatch)))))))]
-;         [sympt (id)
-;           (case result-pattern result
-;             [listpt-r (pts)
-;               (and (result-pattern? pts) ; awere of improper list
-;                 (resultMatchPattern pts pattern) #t)]
-;             [multpt-r (i eachrpt)
-;               (and (resultMatchPattern eachrpt pattern) #t)]
-;             [exprpt-r (id)
-;               #t]
-;             [contpt-r (sym)
-;               #t]
-;             [else #f])
-;           ]
-;       ; [sympt (id)
-;       ;   (and (symbol? body)
-;       ;     (list (list (cons id body))))]
-;         [exprpt (id)
-;           (list (cons id result))]
-;       ; [exprpt (id)
-;       ;   (list (list (cons id body)))]
-;         [contpt (sym)
-;           (case result-pattern result
-;             [listpt-r (pts)
-;               (and (result-pattern? pts) ; awere of improper list
-;                 (resultMatchPattern pts pattern) #t)]
-;             [multpt-r (i eachrpt)
-;               (and (resultMatchPattern eachrpt pattern) #t)]
-;             [exprpt-r (id)
-;               #t]
-;             [contpt-r (sym-r)
-;               (and (eq? sym sym-r) (list '()))]
-;             [else #f])]
-;       ; [contpt (sym) (and (eq? sym body) (list '()))]
-;         [wildpt ()
-;           (list '())]
-;       ; [wildpt () (list '())]
-;         [emptpt ()
-;           (case result-pattern result
-;             [listpt-r (pts)
-;               (and (null? pts) (list '()))]
-;             [multpt-r (i eachrpt)
-;               #t]
-;             [else #f])]
-;       ; [emptpt ()(and (null? body) (list '()))])))
-;         )
-;     ))
-
-
-
-
-
-
 
 
 

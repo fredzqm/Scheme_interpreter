@@ -1,3 +1,18 @@
+(eval-one-exp
+  '(define-syntax if
+      (syntax-rules ()
+        [(_ a b)
+            (if a b (void))])))
+
+(eval-one-exp
+  '(define-syntax define
+      (syntax-rules ()
+        [(_ (n a ...) e1 e2 ...)
+            (define n
+              (lambda (a ...) e1 e2 ...))]
+        [(_ (n a ... l) e1 e2 ...)
+            (define n
+              (lambda (a ... . l) e1 e2 ...))])))
 
 (eval-one-exp
   '(define-syntax let
