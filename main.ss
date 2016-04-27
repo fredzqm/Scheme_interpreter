@@ -340,7 +340,17 @@
   (lambda (proc-value args)
     (cases proc-val proc-value
       [prim-proc (op) (apply-prim-proc op args)]
-			[closure (vars body env)
+	 ;  [closure (len vars lastVar body env)
+   ;      (if (if lastVar
+   ;            (> len (length args))
+   ;            (not (= len (length args))))
+   ;        (eopl:error 'apply-proc "incorrect number of argument: closure ~a ~a" proc-value args))
+   ;      (let lambdaEval ([code body][env (extend-env vars args env)])
+   ;        (if (null? (cdr code))
+   ;          (eval-exp (car code) env)
+   ;          (begin (eval-exp (car code) env)
+   ;            (lambdaEval (cdr code) env))))]
+      [closure (vars body env)
         (let lambdaEval ([code body]
           [env 
             (if (list? vars)
