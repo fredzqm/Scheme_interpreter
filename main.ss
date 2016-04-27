@@ -2,17 +2,24 @@
 
 ;:  Single-file version of the interpreter.
 ;; Easier to submit to server, probably harder to use in the development process
-(define map
-  (lambda (proc ls)
-    (if (null? ls)
-        '()
-        (cons (proc (car ls)) (map proc (cdr ls))))))
+; (define map
+;   (lambda (proc ls)
+;     (if (null? ls)
+;         '()
+;         (cons (proc (car ls)) (map proc (cdr ls))))))
 
 (define (implist-of pred?)
   (lambda(implst)
     (let helper ([ls implst])
       (or (null? ls) (pred? ls)
         (and (pred? (car ls)) (helper (cdr ls)))))))
+
+(define slist-contain?
+  (lambda (slist x)
+    (if (pair? slist)
+      (or (slist-contain? (car slist) x)
+        (slist-contain? (cdr slist) x))
+      (eq? x slist))))
 
 (load "chez-init.ss")
 (load "syntax.ss")
@@ -31,7 +38,7 @@
   [lit-cexp
        (datum (lambda (x)
           (ormap (lambda (pred) (pred x))
-           (list number? vector? boolean? symbol? string? pair? null? void?))))]
+           (list number? vector? boolean? symbol? string? pair? null?))))]
   [app-cexp (rator cexpression?)
       (rands (list-of cexpression?))]
   [lambda-cexp (vars (implist-of symbol?))
@@ -60,9 +67,7 @@
    (name symbol?)]
   [closure (vars (implist-of symbol?))
       (body (list-of cexpression?))
-      (env environment?)])
-   
-
+      (env environment?)])   
 
 
 ;-------------------+
@@ -135,13 +140,6 @@
             (if (eq? env global-env)
               (add-to-env! env sym val)
               (change-env! encl_env sym val))))))))
-            ; (cases environment encl_env ; Value is NOT found
-            ;   (extended-env-record (lsyms lvals lenv)
-            ;     (change-env! encl_env sym val))
-            ;   (empty-env-record () ; Doesn't gurantee in global environment
-            ;     (if (eq? env global-env)
-            ;         (add-to-env! env sym val)
-            ;         (change-env! encl_env sym val))))
 
 (define define-in-env!
   (lambda (env sym val)
@@ -172,8 +170,8 @@
 (define 3rd caddr)
 
 (define parse-exp
-  (lambda (datum env)
-     (let* ([curlev-parse (lambda (exp) (parse-exp exp env))])
+  (lambda (datum bondedVars)
+     (let ([curlev-parse (lambda (exp) (parse-exp exp bondedVars))])
         (cond
           [(symbol? datum) (var-cexp datum)]
           [(number? datum) (lit-cexp datum)]
@@ -182,20 +180,20 @@
           [(string? datum) (lit-cexp datum)]
           [(null? datum) (lit-cexp datum)]
           [(pair? datum)
-            (if (symbol? (car datum))
-              (let ([ratorSym (car datum)])
-                (apply-env env ratorSym
-                  (lambda (x) (app-cexp (var-cexp ratorSym) (map curlev-parse (cdr datum)))) ; occur bounded
-                  (lambda () (apply-env global-syntax-env ratorSym ; occur free
+            (let ([rator (car datum)][rands (cdr datum)])
+              (if (symbol? rator)
+                (if (slist-contain? rator bondedVars)
+                  (app-cexp (var-cexp rator) (map curlev-parse rands)) ; occur bounded
+                  (apply-env global-syntax-env rator ; occur free
                     (lambda (expanRules) (apply-syntax expanRules datum
                       (lambda(x)(curlev-parse x))
-                      (lambda() (apply-env core-syntax-env ratorSym
-                        (lambda(coreRules) (apply-core-syntax coreRules datum env)) ; does proper syntax exapnsion
+                      (lambda() (apply-env core-syntax-env rator
+                        (lambda(coreRules) (apply-core-syntax coreRules datum bondedVars)) ; does proper syntax exapnsion
                         (lambda() (eopl:error 'syntax-expansion "Invalid Sytanx ~s" exp)))))) ; try syntax exapnsion but failed
-                    (lambda() (apply-env core-syntax-env ratorSym
-                      (lambda(coreRules) (apply-core-syntax coreRules datum env))
-                      (lambda() (app-cexp (var-cexp ratorSym) (map (lambda (d) (parse-exp d env)) (cdr datum))))))))))
-              (app-cexp (parse-exp (car datum) env) (map (lambda (d) (parse-exp d env)) (cdr datum))))]
+                    (lambda() (apply-env core-syntax-env rator
+                      (lambda(coreRules) (apply-core-syntax coreRules datum bondedVars))
+                      (lambda() (app-cexp (var-cexp rator) (map curlev-parse rands)))))))
+                (app-cexp (curlev-parse rator) (map curlev-parse rands))))]
           [else (eopl:error 'parse-exp "bad expression: ~s" datum)]))))
 
 
@@ -207,9 +205,9 @@
         (fail)))))
       
 (define apply-core-syntax
-  (lambda (coreSyntax exp env)
+  (lambda (coreSyntax exp bondedVars)
     (let ([sym (car exp)][body (cdr exp)]
-          [curlev-parse (lambda (exp) (parse-exp exp env))])
+          [curlev-parse (lambda (exp) (parse-exp exp bondedVars))])
       (or (ormap (lambda(x) (matchpattern x body)) coreSyntax)
         (eopl:error 'apply-core-syntax "invalid core expression format ~s" exp))
       (case sym
@@ -217,9 +215,10 @@
           (lit-cexp
             (car body))]
         [(lambda)
-          (lambda-cexp 
-            (car body)
-            (map curlev-parse (cdr body)))]
+          (let ([innerbondedVars (cons (car body) bondedVars)])
+            (lambda-cexp
+              (car body)
+              (map (lambda(exp) (parse-exp exp innerbondedVars)) (cdr body))))]
         [(if)
           (if-cexp
             (curlev-parse (car body))
@@ -298,7 +297,7 @@
     (cond
       [(and (pair? form)(eq? (car form) 'define-syntax)
         (eval-define-syntax (cdr form)))]
-      [else (eval-exp (parse-exp form (empty-env)) (empty-env))])))
+      [else (eval-exp (parse-exp form '()) (empty-env))])))
 
 
 ; eval-exp is the main component of the interpreter
@@ -333,7 +332,6 @@
       [else (eopl:error 'eval-exp "Bad abstract syntax: ~a" exp)])))
 
 ; evaluate the list of operands, putting results into a list
-
 ;  Apply a procedure to its arguments.
 ;  At this point, we only have primitive procedures.  
 ;  User-defined procedures will be added later.
@@ -457,24 +455,23 @@
 
 
 ; Other Utility Methods
-(define void?
-  (lambda (obj)
-    (eq? (void) obj)))
 
-(define not-pred
-  (lambda (pred?)
-    (lambda (arg)
-      (not (pred? arg)))))
+; (define not-pred
+;   (lambda (pred?)
+;     (lambda (arg)
+;       (not (pred? arg)))))
 
-(define equal-to-n
-  (lambda (n)
-    (lambda (arg)
-      (= n arg))))
+; (define equal-to-n
+;   (lambda (n)
+;     (lambda (arg)
+;       (= n arg))))
 
-(define or-pred
-  (lambda (preda predb)
-    (lambda (obj)
-      (or (preda obj) (predb obj)))))
+; (define or-pred
+;   (lambda (preda predb)
+;     (lambda (obj)
+;       (or (preda obj) (predb obj)))))
+
+
 
 (define implst->list
   (letrec ([loop (lambda (vars)
@@ -492,13 +489,13 @@
 
 
 
-(define create-symbol-counter
-  (lambda ()
-    (let ([count 0])
-      (lambda ()
-        (let ([current count])
-          (set! count (+ 1 count))
-          (string->symbol (number->string current)))))))
+; (define create-symbol-counter
+;   (lambda ()
+;     (let ([count 0])
+;       (lambda ()
+;         (let ([current count])
+;           (set! count (+ 1 count))
+;           (string->symbol (number->string current)))))))
 
 
 (load "syntaxExpansion.ss")

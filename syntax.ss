@@ -16,12 +16,7 @@
   )
 
 
-(define slist-contain
-  (lambda (slist x)
-    (if (pair? slist)
-      (or (slist-contain (car slist) x)
-        (slist-contain (cdr slist) x))
-      (eq? x slist))))
+
 
 ;-------------------+
 ;                   |
@@ -139,7 +134,7 @@
 (define parse-result-pattern
   (lambda (pat occurs)
     (let ([const? (lambda(x) 
-                    (not (slist-contain occurs x)))])
+                    (not (slist-contain? occurs x)))])
       (let parseLoop ([pat pat])
         (cond
           [(symbol? pat)
