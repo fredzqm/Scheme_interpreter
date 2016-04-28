@@ -37,7 +37,7 @@
   '(define-syntax letrec
       (syntax-rules ()
         [(_ ([x v] ...) e1 e2 ...)
-            (let* ([x #f] ...)
+            (let ([x #f] ...)
               (set! x v) ...
               e1 e2 ...)])))
 
@@ -104,3 +104,24 @@
         (cond [(member sym (list p ...)) e] ... )]
         )))
 
+
+
+(eval-one-exp
+  '(define-syntax class
+    (syntax-rules ()
+      [(class name
+        (f ...)
+        ((_ ca ...) ce1 ce2 ...)
+        ((methodName a ...) e1 e2 ...) ...)
+
+        (define (name ca ...)
+          (let ([f #f] ...)
+            (lambda)
+            ce1 ce2 ...
+            (lambda (method . args)
+              (cases method
+                []
+                )
+              )
+            ))]
+      )))

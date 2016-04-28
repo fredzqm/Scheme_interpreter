@@ -340,7 +340,7 @@
   (lambda (proc-value args)
     (cases proc-val proc-value
       [prim-proc (op) (apply-prim-proc op args)]
-	 ;  [closure (len vars lastVar body env)
+	 ;  [closure (len vars body env)
    ;      (if (if lastVar
    ;            (> len (length args))
    ;            (not (= len (length args))))
@@ -393,6 +393,8 @@
   (lambda (prim-proc args)
     (case prim-proc
       [(apply) (apply-proc (car args)
+                  (if (null? (cdr args))
+                    (eopl:error 'apply ""))
                   (let loop ([arg-ls (cdr args)]) ; Caution: No error-checking for 0 args
                     (if (null? (cdr arg-ls))
                       (car arg-ls)
@@ -402,9 +404,6 @@
                   (if (null? arg-ls) ; Caution: No error-checking for 0 args
                       '()
                       (cons (apply-proc proc (list (car arg-ls))) (apply-prim-proc 'map (list proc (cdr arg-ls))))))]
-      ; (if (null? (cdr args))
-      ;             '()
-      ;             (cons (apply-proc (car args) (cadr args)) (apply-prim-proc prim-proc (cons (car args) (cddr args)))))]
       [(+) (apply + args)]
       [(-) (apply - args)]
       [(*) (apply * args)]
