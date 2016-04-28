@@ -365,8 +365,8 @@
 
 (define *prim-proc-names* '(apply map + - * / add1 sub1 zero? not = < > <= >= cons list null? assq eq?
                             eqv? equal? atom? car caar caaar caadr cadar cdaar caddr cdadr cddar cdddr
-                            cadr cdar cddr cdr length list->vector list? pair? procedure? vector->list
-                            vector make-vector vector-ref vector? number? symbol? set-car! set-cdr!
+                            cadr cdar cddr cdr length list->vector list? pair? append list-tail procedure?
+                            vector->list vector make-vector vector-ref vector? number? symbol? set-car! set-cdr!
                             vector-set! display newline void quotient member))
 
 (define global-env         ; for now, our initial global environment only contains 
@@ -434,6 +434,8 @@
       [(list->vector) (apply list->vector args)]
       [(list?) (apply list? args)]
       [(pair?) (apply pair? args)]
+      [(append) (apply append args)]
+      [(list-tail) (apply list-tail args)]
       [(procedure?) (apply proc-val? args)]
       [(vector->list) (apply vector->list args)]
       [(vector) (apply vector args)]
