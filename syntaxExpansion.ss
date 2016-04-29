@@ -99,10 +99,9 @@
   '(define-syntax case
     (syntax-rules (else)
       [(_ sym ((p1 p2 ...) e1 e2 ... ) ... (else l1 l2 ...))
-        (cond [(member sym (quote (p1 p2 ...))) e1 e2 ...] ... (else l1 l2 ...))]
+        (cond [(member sym '(p1 p2 ...)) e1 e2 ...] ... (else l1 l2 ...))]
       [(_ sym ((p1 p2 ...) e1 e2 ... ) ... )
-        (cond [(member sym (quote (p1 p2 ...))) e1 e2 ...] ... )]
-        )))
+        (cond [(member sym '(p1 p2 ...)) e1 e2 ...] ... )])))
 
 
 
@@ -112,14 +111,13 @@
       [(_ (className ca ...)
         ([f fnit] ...)
         [(methodName a ...) e1 e2 ...] ...)
-
-        (define (className ca ...)
-          (let ([f fnit] ...)
-            (lambda (method . args)
-              (case method
-                [(methodName)
-                  (apply (lambda(a ...) e1 e2 ...) args)] ...))))]
-      )))
+          (define (className ca ...)
+            (let ([f fnit] ...)
+              (lambda (method . args)
+                (cond
+                  [(eq? 'methodName method)
+                    (apply (lambda(a ...) e1 e2 ...) args)] ...
+                  [else (list 'className "Does not have method" method)]))))])))
 
 
 (eval-one-exp
