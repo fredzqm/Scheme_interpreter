@@ -2,11 +2,6 @@
 
 ;:  Single-file version of the interpreter.
 ;; Easier to submit to server, probably harder to use in the development process
-; (define map
-;   (lambda (proc ls)
-;     (if (null? ls)
-;         '()
-;         (cons (proc (car ls)) (map proc (cdr ls))))))
 
 (define (implist-of pred?)
   (lambda(implst)
@@ -460,6 +455,7 @@
       [(newline) (apply newline args)]
       [(void) (apply void args)]
       [(quotient) (apply quotient args)]
+      [(member) (apply member args)]
       [else (error 'apply-prim-proc 
             "Bad primitive procedure name: ~s" 
             prim-proc)])))
@@ -510,5 +506,4 @@
 
 
 (load "syntaxExpansion.ss")
-(load "predefinedProcedure.ss")
 
