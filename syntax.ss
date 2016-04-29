@@ -173,8 +173,7 @@
   (lambda (result occurs)
     (cases result-pattern result
       [listpt-r (pts)
-        (listpt-r 
-          (let loop ([pts pts])
+        (let ([try (let loop ([pts pts])
             (cond
               [(null? pts)  '()]
               [(result-pattern? pts) (findMultIndex pts occurs)]
@@ -182,7 +181,8 @@
                 (and carpt
                   (let ([cdrpt (loop (cdr pts))])
                     (and cdrpt
-                      (cons carpt cdrpt)))))])))]
+                      (cons carpt cdrpt)))))]))])
+          (and try (listpt-r try)))]
       [multpt-r (i eachrpt)
         (let ([try (let loop ([i 1][envs (cdr occurs)])
               (if (null? envs) #f ; no match found

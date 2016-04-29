@@ -98,30 +98,37 @@
 (eval-one-exp
   '(define-syntax case
     (syntax-rules (else)
-      [(_ sym ((p ...) e) ... (else l))
-        (cond [(member sym (list p ...)) e] ... (else l))]
-      [(_ sym ((p ...) e) ... )
-        (cond [(member sym (list p ...)) e] ... )]
+      [(_ sym ((p1 p2 ...) e1 e2 ... ) ... (else l1 l2 ...))
+        (cond [(member sym (quote (p1 p2 ...))) e1 e2 ...] ... (else l1 l2 ...))]
+      [(_ sym ((p1 p2 ...) e1 e2 ... ) ... )
+        (cond [(member sym (quote (p1 p2 ...))) e1 e2 ...] ... )]
         )))
 
 
 
 (eval-one-exp
-  '(define-syntax class
+  '(define-syntax define-class
     (syntax-rules ()
-      [(class name
-        (f ...)
-        ((_ ca ...) ce1 ce2 ...)
-        ((methodName a ...) e1 e2 ...) ...)
+      [(_ (className ca ...)
+        ([f fnit] ...)
+        [(methodName a ...) e1 e2 ...] ...)
 
-        (define (name ca ...)
-          (let ([f #f] ...)
-            (lambda)
-            ce1 ce2 ...
+        (define (className ca ...)
+          (let ([f fnit] ...)
             (lambda (method . args)
-              (cases method
-                []
-                )
-              )
-            ))]
+              (case method
+                [(methodName)
+                  (apply (lambda(a ...) e1 e2 ...) args)] ...))))]
       )))
+
+
+(eval-one-exp
+  '(define-class (stack)
+    ([s '()])
+    [(pop)
+        (let ([x (car s)])
+          (set! s (cdr s))
+          x)]
+    [(push e)
+        (set! s (cons e s))]))
+

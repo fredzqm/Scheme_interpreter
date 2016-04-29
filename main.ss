@@ -184,7 +184,7 @@
                       (lambda(x)(curlev-parse x))
                       (lambda() (apply-env core-syntax-env rator
                         (lambda(coreRules) (apply-core-syntax coreRules datum bondedVars)) ; does proper syntax exapnsion
-                        (lambda() (eopl:error 'syntax-expansion "Invalid Sytanx ~s" exp)))))) ; try syntax exapnsion but failed
+                        (lambda() (eopl:error 'syntax-expansion "Invalid Sytanx ~s" datum)))))) ; try syntax exapnsion but failed
                     (lambda() (apply-env core-syntax-env rator
                       (lambda(coreRules) (apply-core-syntax coreRules datum bondedVars))
                       (lambda() (app-cexp (var-cexp rator) (map curlev-parse rands)))))))
@@ -387,18 +387,17 @@
 (define apply-prim-proc
   (lambda (prim-proc args)
     (case prim-proc
-      [(apply) (apply-proc (car args)
-                  (if (null? (cdr args))
-                    (eopl:error 'apply ""))
+      [(apply) (if (null? (cdr args))
+                (eopl:error 'apply ""))
+              (apply-proc (car args)
                   (let loop ([arg-ls (cdr args)]) ; Caution: No error-checking for 0 args
                     (if (null? (cdr arg-ls))
                       (car arg-ls)
                       (cons (car arg-ls) (loop (cdr arg-ls))))))]
-      [(map) (let ([proc (car args)]
-                    [arg-ls (cadr args)])
-                  (if (null? arg-ls) ; Caution: No error-checking for 0 args
-                      '()
-                      (cons (apply-proc proc (list (car arg-ls))) (apply-prim-proc 'map (list proc (cdr arg-ls))))))]
+      [(map) (let ([proc (car args)][arg-ls (cadr args)])
+                (if (null? arg-ls) ; Caution: No error-checking for 0 args
+                    '()
+                    (cons (apply-proc proc (list (car arg-ls))) (apply-prim-proc 'map (list proc (cdr arg-ls))))))]
       [(+) (apply + args)]
       [(-) (apply - args)]
       [(*) (apply * args)]
