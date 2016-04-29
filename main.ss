@@ -45,7 +45,9 @@
   [set!-cexp (var symbol?)
       (val cexpression?)]
   [define-cexp (var symbol?)
-      (val cexpression?)])
+      (val cexpression?)]
+  [special-exp (name symbol?)
+      (args (lambda(x) #t))])
 
 ; environment type definitions
 (define-datatype environment environment?
@@ -179,15 +181,17 @@
               (if (symbol? rator)
                 (if (slist-contain? rator bondedVars)
                   (app-cexp (var-cexp rator) (map curlev-parse rands)) ; occur bounded
-                  (apply-env global-syntax-env rator ; occur free
-                    (lambda (expanRules) (apply-syntax expanRules datum
-                      (lambda(x)(curlev-parse x))
+                  (if (assoc rator specialOperation)
+                    (special-exp rator rands)
+                    (apply-env global-syntax-env rator ; occur free
+                      (lambda (expandRules) (apply-syntax expandRules datum
+                        (lambda(x)(curlev-parse x))
+                        (lambda() (apply-env core-syntax-env rator
+                          (lambda(coreRules) (apply-core-syntax coreRules datum bondedVars)) ; does proper syntax exapnsion
+                          (lambda() (eopl:error 'syntax-expansion "Invalid Sytanx ~s" datum)))))) ; try syntax exapnsion but failed
                       (lambda() (apply-env core-syntax-env rator
-                        (lambda(coreRules) (apply-core-syntax coreRules datum bondedVars)) ; does proper syntax exapnsion
-                        (lambda() (eopl:error 'syntax-expansion "Invalid Sytanx ~s" datum)))))) ; try syntax exapnsion but failed
-                    (lambda() (apply-env core-syntax-env rator
-                      (lambda(coreRules) (apply-core-syntax coreRules datum bondedVars))
-                      (lambda() (app-cexp (var-cexp rator) (map curlev-parse rands)))))))
+                        (lambda(coreRules) (apply-core-syntax coreRules datum bondedVars))
+                        (lambda() (app-cexp (var-cexp rator) (map curlev-parse rands))))))))
                 (app-cexp (curlev-parse rator) (map curlev-parse rands))))]
           [else (eopl:error 'parse-exp "bad expression: ~s" datum)]))))
 
@@ -232,9 +236,22 @@
 
 ;-----------------------+
 ;                       |
-;   SYNTAX EXPANSION    |
+;   Global Environmnets |
 ;                       |
 ;-----------------------+
+
+(define specialOperation '())
+
+(define (addSpecialOperation name proc)
+  (if (not (symbol? name))
+    (eopl:error 'addSpecialOperation "can only define symbol procedure ~s" name))
+  (set! specialOperation (cons (cons name proc) specialOperation)))
+
+
+(addSpecialOperation 'define-syntax  eval-define-syntax)
+
+      ; [(and (pair? form)(eq? (car form) 'define-syntax)
+      ;   (eval-define-syntax (cdr form)))]
 
 (define global-syntax-env
   (extend-env '() '() (empty-env)))
@@ -264,108 +281,14 @@
     (empty-env)))
 
 
-
-;-------------------+
-;                   |
-;   INTERPRETER     |
-;                   |
-;-------------------+
-
-; the shell entry
-(define rep      ; "read-eval-print" loop.
-  (lambda ()
-    (display "--> ")
-    ;; notice that we don't save changes to the environment...
-    (let ([answer (top-level-eval (read))])
-      ;; TODO: are there answers that should display differently?
-      (eopl:pretty-print answer) (newline)
-      (rep))))  ; tail-recursive, so stack doesn't grow.
-
-; the separate interpreter entry
-(define eval-one-exp
-  (lambda (x) (top-level-eval x)))
-
-
-; top-level-eval evaluates a form in the global environment
-(define top-level-eval
-  (lambda (form)
-    (cond
-      [(and (pair? form)(eq? (car form) 'define-syntax)
-        (eval-define-syntax (cdr form)))]
-      [else (eval-exp (parse-exp form '()) (empty-env))])))
-
-
-; eval-exp is the main component of the interpreter
-(define eval-exp
-  (lambda (exp env)
-    (cases cexpression exp
-      [lit-cexp (datum) datum]
-      [var-cexp (id)
-				(apply-env env id ; look up its value.
-      	   (lambda (x) x) ; procedure to call if id is in the environment 
-           (lambda ()
-             (apply-env global-env id
-                (lambda (x) x)
-                (lambda () (eopl:error 'apply-env ; procedure to call if id not in env
-                  "variable not found in environment: ~s" id)))))]
-      [if-cexp (test then-op else-op)
-        (if (eval-exp test env)
-          (eval-exp then-op env)
-          (eval-exp else-op env))]
-      [lambda-cexp (vars body)
-        (closure vars body env)]
-      [set!-cexp (var val)
-        (let ([val (eval-exp val env)])
-          (change-env! env var val))]
-      [define-cexp (var val)
-        (let ([val (eval-exp val env)])
-          (define-in-env! env var val))]
-      [app-cexp (rator rands)
-        (let ([proc-value (eval-exp rator env)]
-              [args (map (lambda(x) (eval-exp x env)) rands)])
-          (apply-proc proc-value args))]
-      [else (eopl:error 'eval-exp "Bad abstract syntax: ~a" exp)])))
-
-; evaluate the list of operands, putting results into a list
-;  Apply a procedure to its arguments.
-;  At this point, we only have primitive procedures.  
-;  User-defined procedures will be added later.
-
-(define apply-proc
-  (lambda (proc-value args)
-    (cases proc-val proc-value
-      [prim-proc (op) (apply-prim-proc op args)]
-	 ;  [closure (len vars body env)
-   ;      (if (if lastVar
-   ;            (> len (length args))
-   ;            (not (= len (length args))))
-   ;        (eopl:error 'apply-proc "incorrect number of argument: closure ~a ~a" proc-value args))
-   ;      (let lambdaEval ([code body][env (extend-env vars args env)])
-   ;        (if (null? (cdr code))
-   ;          (eval-exp (car code) env)
-   ;          (begin (eval-exp (car code) env)
-   ;            (lambdaEval (cdr code) env))))]
-      [closure (vars body env)
-        (let lambdaEval ([code body]
-          [env 
-            (if (list? vars)
-              (if (= (length vars)(length args))
-                (extend-env vars args env)
-                (eopl:error 'apply-proc "incorrect number of argument: closure ~a ~a" proc-value args))
-              (extend-env (implst->list vars)
-                (let loop ([vars vars][args args]) ; match all parts of args to vars
-                  (if (pair? vars)
-                    (if (pair? args)
-                      (cons (car args) (loop (cdr vars)(cdr args)))
-                      (eopl:error 'apply-proc "not enough arguments: closure ~a ~a" proc-value args))
-                    (list args)))
-              env))])
-          (if (null? (cdr code))
-            (eval-exp (car code) env)
-            (begin (eval-exp (car code) env)
-              (lambdaEval (cdr code) env))))]
-      ; You will add other cases
-      [else (eopl:error 'apply-proc "Attempt to apply bad procedure: ~s" proc-value)])))
+(define reset-global-variables
+  (lambda()
+    (set! global-env         
+      (extend-env            
+         *prim-proc-names*   
+         (map prim-proc      
+              *prim-proc-names*)
+         (empty-env)))))
 
 
 (define *prim-proc-names* '(apply map + - * / add1 sub1 zero? not = < > <= >= cons list null? assq eq?
@@ -374,12 +297,7 @@
                             vector->list vector make-vector vector-ref vector? number? symbol? set-car! set-cdr!
                             vector-set! display newline void quotient member))
 
-(define global-env         ; for now, our initial global environment only contains 
-  (extend-env            ; procedure names.  Recall that an environment associates
-     *prim-proc-names*   ;  a value (not an expression) with an identifier.
-     (map prim-proc      
-          *prim-proc-names*)
-     (empty-env)))
+(reset-global-variables)
 
 
 ; Usually an interpreter must define each 
@@ -460,23 +378,132 @@
             prim-proc)])))
 
 
+
+
+;-------------------+
+;                   |
+;  INTERPRETER API  |
+;                   |
+;-------------------+
+
+; the shell entry
+(define rep      ; "read-eval-print" loop.
+  (lambda ()
+    (display "--> ")
+    ;; notice that we don't save changes to the environment...
+    (let ([answer (top-level-eval (read))])
+      ;; TODO: are there answers that should display differently?
+      (eopl:pretty-print answer) (newline)
+      (rep))))  ; tail-recursive, so stack doesn't grow.
+
+; the separate interpreter entry
+(define eval-one-exp
+  (lambda (x) (top-level-eval x)))
+
+
+; top-level-eval evaluates a form in the global environment
+(define top-level-eval
+  (lambda (form)
+    (cond
+      ; [(and (pair? form)(eq? (car form) 'define-syntax)
+      ;   (eval-define-syntax (cdr form)))]
+      [else (eval-exp (parse-exp form '()) (empty-env))])))
+
+
+
+;-------------------+
+;                   |
+;   Evaluation      |
+;                   |
+;-------------------+
+
+
+
+; eval-exp is the main component of the interpreter
+(define eval-exp
+  (lambda (exp env)
+    (cases cexpression exp
+      [lit-cexp (datum) datum]
+      [var-cexp (id)
+        (apply-env env id ; look up its value.
+           (lambda (x) x) ; procedure to call if id is in the environment 
+           (lambda ()
+             (apply-env global-env id
+                (lambda (x) x)
+                (lambda () (eopl:error 'apply-env ; procedure to call if id not in env
+                  "variable not found in environment: ~s" id)))))]
+      [if-cexp (test then-op else-op)
+        (if (eval-exp test env)
+          (eval-exp then-op env)
+          (eval-exp else-op env))]
+      [lambda-cexp (vars body)
+        (closure vars body env)]
+      [set!-cexp (var val)
+        (let ([val (eval-exp val env)])
+          (change-env! env var val))]
+      [define-cexp (var val)
+        (let ([val (eval-exp val env)])
+          (define-in-env! env var val))]
+      [app-cexp (rator rands)
+        (let ([proc-value (eval-exp rator env)]
+              [args (map (lambda(x) (eval-exp x env)) rands)])
+          (apply-proc proc-value args))]
+      [special-exp (name args)
+        ((cdr (assoc name specialOperation)) args)]
+      [else (eopl:error 'eval-exp "Bad abstract syntax: ~a" exp)])))
+
+; evaluate the list of operands, putting results into a list
+;  Apply a procedure to its arguments.
+;  At this point, we only have primitive procedures.  
+;  User-defined procedures will be added later.
+
+(define apply-proc
+  (lambda (proc-value args)
+    (cases proc-val proc-value
+      [prim-proc (op) (apply-prim-proc op args)]
+   ;  [closure (len vars body env)
+   ;      (if (if lastVar
+   ;            (> len (length args))
+   ;            (not (= len (length args))))
+   ;        (eopl:error 'apply-proc "incorrect number of argument: closure ~a ~a" proc-value args))
+   ;      (let lambdaEval ([code body][env (extend-env vars args env)])
+   ;        (if (null? (cdr code))
+   ;          (eval-exp (car code) env)
+   ;          (begin (eval-exp (car code) env)
+   ;            (lambdaEval (cdr code) env))))]
+      [closure (vars body env)
+        (let lambdaEval ([code body]
+          [env 
+            (if (list? vars)
+              (if (= (length vars)(length args))
+                (extend-env vars args env)
+                (eopl:error 'apply-proc "incorrect number of argument: closure ~a ~a" proc-value args))
+              (extend-env (implst->list vars)
+                (let loop ([vars vars][args args]) ; match all parts of args to vars
+                  (if (pair? vars)
+                    (if (pair? args)
+                      (cons (car args) (loop (cdr vars)(cdr args)))
+                      (eopl:error 'apply-proc "not enough arguments: closure ~a ~a" proc-value args))
+                    (list args)))
+              env))])
+          (if (null? (cdr code))
+            (eval-exp (car code) env)
+            (begin (eval-exp (car code) env)
+              (lambdaEval (cdr code) env))))]
+      ; You will add other cases
+      [else (eopl:error 'apply-proc "Attempt to apply bad procedure: ~s" proc-value)])))
+
+
+
+;-------------------+
+;                   |
+;   Utility         |
+;                   |
+;-------------------+
+
+
+
 ; Other Utility Methods
-
-; (define not-pred
-;   (lambda (pred?)
-;     (lambda (arg)
-;       (not (pred? arg)))))
-
-; (define equal-to-n
-;   (lambda (n)
-;     (lambda (arg)
-;       (= n arg))))
-
-; (define or-pred
-;   (lambda (preda predb)
-;     (lambda (obj)
-;       (or (preda obj) (predb obj)))))
-
 
 
 (define implst->list
@@ -492,16 +519,6 @@
   (lambda (ls ind val)
     (if (= 0 ind) (set-car! ls val)
       (list-set-at-index! (cdr ls) (- ind 1) val))))
-
-
-
-; (define create-symbol-counter
-;   (lambda ()
-;     (let ([count 0])
-;       (lambda ()
-;         (let ([current count])
-;           (set! count (+ 1 count))
-;           (string->symbol (number->string current)))))))
 
 
 (load "syntaxExpansion.ss")
