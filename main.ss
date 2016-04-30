@@ -27,6 +27,7 @@
 
 ; parsed expression
 
+
 ; the core expression of scheme. Syntax expansion should convert all code to core scheme.
 (define-datatype cexpression cexpression?
   [var-cexp (id symbol?)]
@@ -374,13 +375,15 @@
                             vector->list vector make-vector vector-ref vector? number? symbol? set-car! set-cdr!
                             vector-set! display newline void quotient member))
 
-(define global-env         ; for now, our initial global environment only contains 
-  (extend-env            ; procedure names.  Recall that an environment associates
-     *prim-proc-names*   ;  a value (not an expression) with an identifier.
-     (map prim-proc      
-          *prim-proc-names*)
-     (empty-env)))
+(define (reset-global-env)
+  (set! global-env         ; for now, our initial global environment only contains 
+    (extend-env            ; procedure names.  Recall that an environment associates
+       *prim-proc-names*   ;  a value (not an expression) with an identifier.
+       (map prim-proc      
+            *prim-proc-names*)
+       (empty-env))))
 
+(reset-global-env)
 
 ; Usually an interpreter must define each 
 ; built-in procedure individually.  We are "cheating" a little bit.
