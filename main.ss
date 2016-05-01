@@ -369,11 +369,10 @@
       [else (eopl:error 'apply-proc "Attempt to apply bad procedure: ~s" proc-value)])))
 
 
-(define *prim-proc-names* '(apply map + - * / add1 sub1 zero? not = < > <= >= cons list null? assq eq?
-                            eqv? equal? atom? car caar caaar caadr cadar cdaar caddr cdadr cddar cdddr
-                            cadr cdar cddr cdr length list->vector list? pair? append list-tail procedure?
+(define *prim-proc-names* '(apply + - * / add1 sub1 zero? not = < > <= >= cons list null? assq eq?
+                            eqv? equal? atom? car cdr length list->vector list? pair? append list-tail procedure?
                             vector->list vector make-vector vector-ref vector? number? symbol? set-car! set-cdr!
-                            vector-set! display newline void quotient member))
+                            vector-set! display newline void quotient))
 
 (define (reset-global-env)
   (set! global-env         ; for now, our initial global environment only contains 
@@ -397,10 +396,6 @@
                     (if (null? (cdr arg-ls))
                       (car arg-ls)
                       (cons (car arg-ls) (loop (cdr arg-ls))))))]
-      [(map) (let ([proc (car args)][arg-ls (cadr args)])
-                (if (null? arg-ls) ; Caution: No error-checking for 0 args
-                    '()
-                    (cons (apply-proc proc (list (car arg-ls))) (apply-prim-proc 'map (list proc (cdr arg-ls))))))]
       [(+) (apply + args)]
       [(-) (apply - args)]
       [(*) (apply * args)]
@@ -424,18 +419,6 @@
       [(atom?) (apply atom? args)]
       [(car) (apply car args)]
       [(cdr) (apply cdr args)]
-      [(caar) (apply caar args)]
-      [(caaar) (apply caaar args)]
-      [(caadr) (apply caadr args)]
-      [(cadar) (apply cadar args)]
-      [(cdaar) (apply cdaar args)]
-      [(caddr) (apply caddr args)]
-      [(cdadr) (apply cdadr args)]
-      [(cddar) (apply cddar args)]
-      [(cdddr) (apply cdddr args)]
-      [(cadr) (apply cadr args)]
-      [(cdar) (apply cdar args)]
-      [(cddr) (apply cddr args)]
       [(length) (apply length args)]
       [(list->vector) (apply list->vector args)]
       [(list?) (apply list? args)]
@@ -457,7 +440,6 @@
       [(newline) (apply newline args)]
       [(void) (apply void args)]
       [(quotient) (apply quotient args)]
-      [(member) (apply member args)]
       [else (error 'apply-prim-proc 
             "Bad primitive procedure name: ~s" 
             prim-proc)])))
@@ -509,3 +491,4 @@
 
 (load "syntaxExpansion.ss")
 
+(load "procdedures.ss")
