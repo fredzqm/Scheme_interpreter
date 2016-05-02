@@ -279,37 +279,48 @@
 (define rep      ; "read-eval-print" loop.
   (lambda ()
     (display "--> ")
-    ;; notice that we don't save changes to the environment...
-    (let ([answer (top-level-eval (read))])
-      ;; TODO: are there answers that should display differently?
-      (eopl:pretty-print answer) (newline)
-      (rep))))  ; tail-recursive, so stack doesn't grow.
+    (let displayLoop ([answers (top-level-eval (read))])
+      (if (null? answers)
+        (rep)
+        (begin
+          (eopl:pretty-print (car answers)) (newline)
+          (displayLoop (cdr answers)))))))
 
 ; the separate interpreter entry
 (define eval-one-exp
-  (lambda (x) (top-level-eval x)))
+  (lambda (x) 
+    (apply values (top-level-eval x))))
 
 
 ; top-level-eval evaluates a form in the global environment
 (define top-level-eval
   (lambda (form)
-    (cond
+    (values-aslist (cond
       [(and (pair? form)(eq? (car form) 'define-syntax)
         (eval-define-syntax (cdr form)))]
-      [else (value (eval-exp (parse-exp form '()) (empty-env)))])))
+      [else (eval-exp (parse-exp form '()) (empty-env))]))))
 
 
 ; those three function define ADT reference, the return value of eval-exp
 (define value
   (lambda (x)
-    (if (null? x)
-      (void)
-      (car x))))
+    (cond 
+      [(null? x) (void)]
+      [(null? (cdr x)) (car x)]
+      [else (eopl:error 'value "Cannot pass a mult-values to a non-multivalues environment")])))
+
+(define values-aslist
+  (lambda (x) x))
 
 (define modify
-  (lambda (ref val)
-    (set-car! ref val)
-    (refer)))
+  (lambda (ref val-r)
+    (cond 
+      [(null? ref) 
+        (list (value val-r))]
+      [(null? (cdr ref))
+        (set-car! ref (value val-r))
+        (refer)]
+      [else (eopl:error 'modify "Cannot pass a mult-values to a non-multivalues environment")])))
 
 (define refer list)
 
@@ -336,11 +347,8 @@
       [lambda-cexp (vars body)
         (refer (closure vars body env))]
       [set!-cexp (var val)
-        ; (let ([ref (eval-exp val env)])
-        ;   (modify ref val))
-          (change-env! env var (eval-exp val env))
-          (refer)
-        ]
+        (let ([ref (eval-exp (var-cexp var) env)])
+          (modify ref (eval-exp val env)))]
       [define-cexp (var val)
         ; (let ([ref (eval-exp val env)])
           (define-in-env! env var (eval-exp val env))
@@ -348,38 +356,44 @@
           ; (modify ref val))
         ]
       [app-cexp (rator rands)
-        (let ([proc-value (eval-exp rator env)]
+        (let ([procref (eval-exp rator env)]
               [argsref (map (lambda(x) (eval-exp x env)) rands)])
-          (apply-proc proc-value argsref))]
+          (apply-proc procref argsref))]
       [else (eopl:error 'eval-exp "Bad abstract syntax: ~a" exp)])))
 
 ; evaluate the list of operands, putting results into a list
 ;  Apply a procedure to its arguments.
 ;  At this point, we only have primitive procedures.  
 ;  User-defined procedures will be added later.
-
 (define apply-proc
-  (lambda (proc-ref args)
-    (let ([proc-value (value proc-ref)])
-      (cases proc-val proc-value
+  (lambda (proc-r args)
+    (let ([proc-v (value proc-r)])
+      (cases proc-val proc-v
         [prim-proc (op) (refer (apply-prim-proc op (map value args)))]
         [special-proc (op)
           (case op
             [(apply)
               (if (null? (cdr args))
-                (eopl:error 'apply "with no argument ~s" proc-value))
+                (eopl:error 'apply "with no argument ~s" proc-v))
               (apply-proc (car args)
                 (let loop ([nextarg (cadr args)][leftarg (cddr args)]) ; Caution: No error-checking for 0 args
                   (if (null? leftarg)
                     (if (list? nextarg)
                       (map refer (value nextarg))
                       (eopl:error 'apply "The last argument of apply should be a list of arguments ~s" nextarg))
-                    (cons nextarg (loop (car leftarg) (cdr leftarg))))))])]
+                    (cons nextarg (loop (car leftarg) (cdr leftarg))))))]
+            [(call-with-values)
+              (if (not (= 2 (length args)))
+                (eopl:error 'call-with-values "call-with-values takes two parameter producer and consumer: ~s" args))
+              (let ([ret (apply-proc (car args) '())])
+                (apply-proc (cadr args) (map refer (values-aslist ret))))]
+            [(values)
+              (apply refer (map value args))])]
   	 ;  [closure (len vars body env)
      ;      (if (if lastVar
      ;            (> len (length args))
      ;            (not (= len (length args))))
-     ;        (eopl:error 'apply-proc "incorrect number of argument: closure ~a ~a" proc-value args))
+     ;        (eopl:error 'apply-proc "incorrect number of argument: closure ~a ~a" proc-v args))
      ;      (let lambdaEval ([code body][env (extend-env vars args env)])
      ;        (if (null? (cdr code))
      ;          (eval-exp (car code) env)
@@ -391,14 +405,14 @@
               (if (list? vars)
                 (if (= (length vars)(length args))
                   (extend-env vars (map (lambda(x)(refer (value x))) args)  env)
-                  (eopl:error 'apply-proc "incorrect number of argument: closure ~a ~a" proc-value args))
+                  (eopl:error 'apply-proc "incorrect number of argument: closure ~a ~a" proc-v args))
                 (extend-env (implst->list vars)
                   (map (lambda(x) (refer (value x)))
                     (let loop ([vars vars][args args]) ; match all parts of args to vars
                       (if (pair? vars)
                         (if (pair? args)
                           (cons (car args) (loop (cdr vars)(cdr args)))
-                          (eopl:error 'apply-proc "not enough arguments: closure ~a ~a" proc-value args))
+                          (eopl:error 'apply-proc "not enough arguments: closure ~a ~a" proc-v args))
                         (list (refer (map value args))))))
                   env))])
             (if (null? (cdr code))
@@ -406,10 +420,10 @@
               (begin (eval-exp (car code) env)
                 (lambdaEval (cdr code) env))))]
         ; You will add other cases
-        [else (eopl:error 'apply-proc "Attempt to apply bad procedure: ~s" proc-value)]))))
+        [else (eopl:error 'apply-proc "Attempt to apply bad procedure: ~s" proc-v)]))))
 
 
-(define *spec-proc-names* '(apply))
+(define *spec-proc-names* '(apply values call-with-values))
 (define *prim-proc-names* '(+ - * / add1 sub1 zero? not = < > <= >= cons list null? assq eq?
                             eqv? equal? atom? car cdr length list->vector list? pair? append list-tail procedure?
                             vector->list vector make-vector vector-ref vector? number? symbol? set-car! set-cdr!

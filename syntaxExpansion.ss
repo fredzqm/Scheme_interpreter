@@ -19,7 +19,7 @@
   '(define-syntax if
       (syntax-rules ()
         [(_ a b)
-            (if a b (void))])))
+            (if a b (values))])))
 
 (eval-one-exp
   '(define-syntax define
