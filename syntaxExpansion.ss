@@ -18,7 +18,7 @@
 (eval-one-exp
   '(define-syntax if
       (syntax-rules ()
-        [(_ a b)
+        [(_ a b)  
             (if a b (values))])))
 
 (eval-one-exp
@@ -144,6 +144,25 @@
           x)]
     [(push e)
         (set! s (cons e s))]))
+
+
+(eval-one-exp
+  '(define-syntax with-values
+    (syntax-rules ()
+      [(_ p c)
+        (call-with-values (lambda() p) c)])))
+
+
+(eval-one-exp
+  '(define-syntax let-values
+    (syntax-rules ()
+      [(_ ([args v]) e1 e2 ...)
+            (with-values v (lambda args e1 e2 ...))]
+      [(_ ([args1 v1] [args2 v2] ...) e1 e2 ...)
+            (with-values v1
+              (lambda args1
+                (let-values ([args2 v2] ...)
+                  e1 e2 ...)))])))
 
 
 
