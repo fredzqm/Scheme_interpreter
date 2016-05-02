@@ -1,3 +1,19 @@
+(eval-one-exp
+  '(define map
+    (lambda (f ls . more)
+      (if (null? more)
+          (let map1 ([ls ls])
+            (if (null? ls)
+                '()
+                (cons (f (car ls))
+                      (map1 (cdr ls)))))
+          (let map-more ([ls ls] [more more])
+            (if (null? ls)
+                '()
+                (cons
+                  (apply f (car ls) (map car more))
+                  (map-more (cdr ls) (map cdr more)))))))))
+
 
 (eval-one-exp
   '(define-syntax if
@@ -95,7 +111,6 @@
           (if test (begin e1 e2 ... (loop))))])))
 
 
-
 (eval-one-exp
   '(define-syntax case
     (syntax-rules (else)
@@ -103,7 +118,6 @@
         (cond [(member sym '(p1 p2 ...)) e1 e2 ...] ... (else l1 l2 ...))]
       [(_ sym ((p1 p2 ...) e1 e2 ... ) ... )
         (cond [(member sym '(p1 p2 ...)) e1 e2 ...] ... )])))
-
 
 
 (eval-one-exp
