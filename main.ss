@@ -251,9 +251,9 @@
       (list ; quote
         (listpt (exprpt 'e) (emptpt)))
       (list ; lambda
-        (listpt (multpt (sympt 'v) (sympt 'l))
+        (listpt (multpt (exprpt 'v) (sympt 'l))
           (multpt (exprpt 'e) (emptpt)))
-        (listpt (multpt (sympt 'v) (emptpt))
+        (listpt (multpt (exprpt 'v) (emptpt))
           (multpt (exprpt 'e) (emptpt))))
       (list ; if 
         (listpt (exprpt 'p)
@@ -312,7 +312,7 @@
 (define values-aslist
   (lambda (x) x))
 
-(define modify
+(define modify!
   (lambda (ref val-r)
     (cond 
       [(null? ref) 
@@ -320,7 +320,7 @@
       [(null? (cdr ref))
         (set-car! ref (value val-r))
         (refer)]
-      [else (eopl:error 'modify "Cannot pass a mult-values to a non-multivalues environment")])))
+      [else (eopl:error 'modify! "Cannot pass a mult-values to a non-multivalues environment")])))
 
 (define refer list)
 
@@ -348,12 +348,12 @@
         (refer (closure vars body env))]
       [set!-cexp (var val)
         (let ([ref (eval-exp (var-cexp var) env)])
-          (modify ref (eval-exp val env)))]
+          (modify! ref (eval-exp val env)))]
       [define-cexp (var val)
         ; (let ([ref (eval-exp val env)])
           (define-in-env! env var (eval-exp val env))
           (refer)
-          ; (modify ref val))
+          ; (modify! ref val))
         ]
       [app-cexp (rator rands)
         (let ([procref (eval-exp rator env)]
