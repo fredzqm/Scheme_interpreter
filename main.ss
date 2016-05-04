@@ -283,7 +283,7 @@
       (if (null? answers)
         (rep)
         (begin
-          (eopl:pretty-print (car answers)) (newline)
+          (eopl:pretty-print (car answers))
           (displayLoop (cdr answers)))))))
 
 ; the separate interpreter entry
@@ -291,6 +291,9 @@
   (lambda (x) 
     (apply values (top-level-eval x))))
 
+(define eval-many-exps
+  (lambda (ls)
+    (for-each top-level-eval ls)))
 
 ; top-level-eval evaluates a form in the global environment
 (define top-level-eval
