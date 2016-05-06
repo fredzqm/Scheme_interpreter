@@ -37,7 +37,9 @@
            (list number? vector? boolean? symbol? string? pair? null?))))]
   [app-cexp (rator cexpression?)
       (rands (list-of cexpression?))]
-  [lambda-cexp (vars (implist-of symbol?))
+  [lambda-cexp
+      (vars (implist-of symbol?))
+      (ref-map (implist-of boolean?))
       (body (list-of cexpression?))]
   [if-cexp
       (test cexpression?)
@@ -65,6 +67,7 @@
     (name symbol?)]
   [closure 
     (vars (implist-of symbol?))
+    (ref-map (implist-of boolean?))
     (body (list-of cexpression?))
     (env environment?)])   
 
@@ -169,8 +172,8 @@
 (define 3rd caddr)
 
 (define parse-exp
-  (lambda (datum bondedVars)
-     (let ([curlev-parse (lambda (exp) (parse-exp exp bondedVars))])
+  (lambda (datum boundVars)
+     (let ([curlev-parse (lambda (exp) (parse-exp exp boundVars))])
         (cond
           [(symbol? datum) (var-cexp datum)]
           [(number? datum) (lit-cexp datum)]
@@ -181,16 +184,16 @@
           [(pair? datum)
             (let ([rator (car datum)][rands (cdr datum)])
               (if (symbol? rator)
-                (if (slist-contain? rator bondedVars)
-                  (app-cexp (var-cexp rator) (map curlev-parse rands)) ; occur bounded
+                (if (slist-contain? rator boundVars)
+                  (app-cexp (var-cexp rator) (map curlev-parse rands)) ; occur bound
                   (apply-env global-syntax-env rator ; occur free
                     (lambda (expanRules) (apply-syntax expanRules datum
                       (lambda(x)(curlev-parse x))
                       (lambda() (apply-env core-syntax-env rator
-                        (lambda(coreRules) (apply-core-syntax coreRules datum bondedVars)) ; does proper syntax exapnsion
-                        (lambda() (eopl:error 'syntax-expansion "Invalid Sytanx ~s" datum)))))) ; try syntax exapnsion but failed
+                        (lambda(coreRules) (apply-core-syntax coreRules datum boundVars)) ; does proper syntax exapnsion
+                        (lambda() (eopl:error 'syntax-expansion "Invalid sytanx ~s" datum)))))) ; try syntax exapnsion but failed
                     (lambda() (apply-env core-syntax-env rator
-                      (lambda(coreRules) (apply-core-syntax coreRules datum bondedVars))
+                      (lambda(coreRules) (apply-core-syntax coreRules datum boundVars))
                       (lambda() (app-cexp (var-cexp rator) (map curlev-parse rands)))))))
                 (app-cexp (curlev-parse rator) (map curlev-parse rands))))]
           [else (eopl:error 'parse-exp "bad expression: ~s" datum)]))))
@@ -204,20 +207,31 @@
         (fail)))))
       
 (define apply-core-syntax
-  (lambda (coreSyntax exp bondedVars)
+  (lambda (coreSyntax exp boundVars)
     (let ([sym (car exp)][body (cdr exp)]
-          [curlev-parse (lambda (exp) (parse-exp exp bondedVars))])
+          [curlev-parse (lambda (exp) (parse-exp exp boundVars))])
       (or (ormap (lambda(x) (matchpattern x body)) coreSyntax)
-        (eopl:error 'apply-core-syntax "invalid core expression format ~s" exp))
+        (eopl:error 'apply-core-syntax "Invalid core expression format ~s" exp))
       (case sym
         [(quote)
           (lit-cexp
             (car body))]
         [(lambda)
-          (let ([innerbondedVars (cons (car body) bondedVars)])
-            (lambda-cexp
-              (car body)
-              (map (lambda(exp) (parse-exp exp innerbondedVars)) (cdr body))))]
+          (let* ([vars-list (car body)]
+                [ref? (lambda (obj)
+                        (cond
+                          [(symbol? obj) #f]
+                          [(and (list? obj) (eqv? 'ref (car obj)) (symbol? (cadr obj))) #t]
+                          [else (eopl:error 'apply-core-syntax "Invalid argument declaration: ~s" vars-list)]))]
+                [extr-var (lambda (obj)
+                            (if (symbol? obj) obj (cadr obj)))])
+            (let ([ref-map (implst-map ref? vars-list)]
+                  [boundVars (implst-map extr-var vars-list)])
+              (let ([innerboundVars (cons (car body) boundVars)])
+                (lambda-cexp
+                  boundVars
+                  ref-map
+                  (map (lambda(exp) (parse-exp exp innerboundVars)) (cdr body))))))]
         [(if)
           (if-cexp
             (curlev-parse (car body))
@@ -310,36 +324,16 @@
       [(and (pair? form) (eq? (car form) 'define-syntax)
         (eval-define-syntax (cdr form)))]
       [else (eval-exp (parse-exp form '()) (empty-env))])))
-    ; (values-aslist (cond
-    ;   [(and (pair? form) (eq? (car form) 'define-syntax)
-    ;     (eval-define-syntax (cdr form)))]
-    ;   [else (eval-exp (parse-exp form '()) (empty-env))]))))
 
 
 ; these three functions define ADT reference, the return value of eval-exp
 (define refer box)
 
 (define de-refer unbox)
-  ; (lambda (x)
-  ;   (cond 
-  ;     [(null? x) (void)]
-  ;     [(null? (cdr x)) (car x)]
-  ;     [else (eopl:error 'de-refer "Cannot pass a mult-values to a non-multivalues environment")])))
 
 (define reference? box?)
 
-; (define values-aslist
-;   (lambda (x) x))
-
 (define modify! set-box!)
-  ; (lambda (ref val-r)
-  ;   (cond 
-  ;     [(null? ref) 
-  ;       (list (de-refer val-r))]
-  ;     [(null? (cdr ref))
-  ;       (set-car! ref (de-refer val-r))
-  ;       (refer)]
-  ;     [else (eopl:error 'modify! "Cannot pass a mult-values to a non-multivalues environment")])))
 
 ; eval-exp is the main component of the interpreter
 ; eval-exp should return a list of result.
@@ -361,8 +355,8 @@
         (if (de-refer (eval-exp test env))
           (eval-exp then-op env)
           (eval-exp else-op env))]
-      [lambda-cexp (vars body)
-        (refer (closure vars body env))]
+      [lambda-cexp (vars ref-map body)
+        (refer (closure vars ref-map body env))]
       [set!-cexp (var val)
         (let ([ref (eval-exp (var-cexp var) env)])
           (modify! ref (de-refer (eval-exp val env))))
@@ -372,7 +366,11 @@
         (refer (void))]
       [app-cexp (rator rands)
         (let ([procref (eval-exp rator env)]
-              [argsref (map (lambda(x) (eval-exp x env)) rands)])
+              [argsref (map (lambda(x) (let ([result (eval-exp x env)])
+                                          (cond
+                                            [(reference? result) result]
+                                            [(and (pair? result) (null? (cdr result))) (car result)]
+                                            [else (eopl:error 'eval-exp "returned ~d values to single value return context" (length result))]))) rands)])
           (apply-proc procref argsref))]
       [else (eopl:error 'eval-exp "Bad abstract syntax: ~a" exp)])))
 
@@ -408,7 +406,7 @@
                   (apply-proc (cadr args) (list ret))
                   (apply-proc (cadr args) ret)))]
             [(values) args])]
-        [closure (vars body env)
+        [closure (vars ref-map body env)
           (let lambdaEval ([code body]
             [env 
               (if (list? vars)
@@ -533,6 +531,18 @@
   (lambda (ls ind val)
     (if (= 0 ind) (set-car! ls val)
       (list-set-at-index! (cdr ls) (- ind 1) val))))
+
+(define implst-map ; No error checking for now
+  (lambda (f ls . more)
+    (letrec ([map-one-implist
+            (lambda (ls)
+              (cond
+                [(and (not (pair? ls)) (not (null? ls))) (f ls)]
+                [(null? ls) '()]
+                [else (cons (f (car ls)) (map-one-implist (cdr ls)))]))])
+      (if (null? more)
+        (map-one-implist ls)
+        (apply map map-one-implist ls more)))))
 
 (load "syntaxExpansion.ss")
 (load "procdedures.ss")
