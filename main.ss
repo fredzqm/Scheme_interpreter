@@ -548,5 +548,5 @@
 
 (load "procdedures.ss")
 (load "syntaxExpansion.ss")
-(reset-global-env)
 (addSyntaxExpansion)
+(reset-global-env)
