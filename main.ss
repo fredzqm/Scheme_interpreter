@@ -444,9 +444,8 @@
        (append 
           (map (lambda(x) (refer (special-proc x))) *spec-proc-names*)
           (map (lambda(x) (refer (prim-proc x))) *prim-proc-names*))
-       (empty-env))))
-
-(reset-global-env)
+       (empty-env)))
+  (addPredefinedProcedures))
 
 ; Usually an interpreter must define each 
 ; built-in procedure individually.  We are "cheating" a little bit.
@@ -527,6 +526,7 @@
         (list vars)))])
   loop))
 
+
 (define list-set-at-index!
   (lambda (ls ind val)
     (if (= 0 ind) (set-car! ls val)
@@ -544,5 +544,9 @@
         (map-one-implist ls)
         (apply map map-one-implist ls more)))))
 
-(load "syntaxExpansion.ss")
+
+
 (load "procdedures.ss")
+(load "syntaxExpansion.ss")
+(reset-global-env)
+(addSyntaxExpansion)

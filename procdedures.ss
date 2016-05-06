@@ -1,3 +1,4 @@
+(define (addPredefinedProcedures)
 (eval-many-exps '(
 
 (define map
@@ -22,5 +23,4 @@
       [(equal? (car ls) x) ls]
       [else (member x (cdr ls))])))
 
-
-))
+)))

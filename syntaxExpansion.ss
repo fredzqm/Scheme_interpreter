@@ -1,3 +1,4 @@
+(define (addSyntaxExpansion)
 (eval-many-exps '(
 
 (define-syntax if
@@ -140,4 +141,5 @@
         e1 e2 ...
         (while test e1 e2 ...))]))
 
-))
+)))
+
