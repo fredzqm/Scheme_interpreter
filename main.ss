@@ -279,17 +279,25 @@
 (define rep      ; "read-eval-print" loop.
   (lambda ()
     (display "--> ")
-    (let displayLoop ([answers (top-level-eval (read))])
-      (if (null? answers)
-        (rep)
+    (let ([answer (top-level-eval (read))])
+      (if (reference? answer)
         (begin
-          (eopl:pretty-print (car answers))
-          (displayLoop (cdr answers)))))))
+          (eopl:pretty-print (de-refer answer))
+          (rep))
+        (let displayLoop ([answers (map de-refer answer)])
+          (if (null? answers)
+            (rep)
+            (begin
+              (eopl:pretty-print (car answers))
+              (displayLoop (cdr answers)))))))))
 
 ; the separate interpreter entry
 (define eval-one-exp
   (lambda (x) 
-    (apply values (top-level-eval x))))
+    (let ([result (top-level-eval x)])
+      (if (reference? result)
+        (de-refer result)
+        (map de-refer result)))))
 
 (define eval-many-exps
   (lambda (ls)
@@ -298,34 +306,40 @@
 ; top-level-eval evaluates a form in the global environment
 (define top-level-eval
   (lambda (form)
-    (values-aslist (cond
-      [(and (pair? form)(eq? (car form) 'define-syntax)
+    (cond
+      [(and (pair? form) (eq? (car form) 'define-syntax)
         (eval-define-syntax (cdr form)))]
-      [else (eval-exp (parse-exp form '()) (empty-env))]))))
+      [else (eval-exp (parse-exp form '()) (empty-env))])))
+    ; (values-aslist (cond
+    ;   [(and (pair? form) (eq? (car form) 'define-syntax)
+    ;     (eval-define-syntax (cdr form)))]
+    ;   [else (eval-exp (parse-exp form '()) (empty-env))]))))
 
 
-; those three function define ADT reference, the return value of eval-exp
-(define value
-  (lambda (x)
-    (cond 
-      [(null? x) (void)]
-      [(null? (cdr x)) (car x)]
-      [else (eopl:error 'value "Cannot pass a mult-values to a non-multivalues environment")])))
+; these three functions define ADT reference, the return value of eval-exp
+(define refer box)
 
-(define values-aslist
-  (lambda (x) x))
+(define de-refer unbox)
+  ; (lambda (x)
+  ;   (cond 
+  ;     [(null? x) (void)]
+  ;     [(null? (cdr x)) (car x)]
+  ;     [else (eopl:error 'de-refer "Cannot pass a mult-values to a non-multivalues environment")])))
 
-(define modify!
-  (lambda (ref val-r)
-    (cond 
-      [(null? ref) 
-        (list (value val-r))]
-      [(null? (cdr ref))
-        (set-car! ref (value val-r))
-        (refer)]
-      [else (eopl:error 'modify! "Cannot pass a mult-values to a non-multivalues environment")])))
+(define reference? box?)
 
-(define refer list)
+; (define values-aslist
+;   (lambda (x) x))
+
+(define modify! set-box!)
+  ; (lambda (ref val-r)
+  ;   (cond 
+  ;     [(null? ref) 
+  ;       (list (de-refer val-r))]
+  ;     [(null? (cdr ref))
+  ;       (set-car! ref (de-refer val-r))
+  ;       (refer)]
+  ;     [else (eopl:error 'modify! "Cannot pass a mult-values to a non-multivalues environment")])))
 
 ; eval-exp is the main component of the interpreter
 ; eval-exp should return a list of result.
@@ -344,20 +358,18 @@
                 (lambda () (eopl:error 'apply-env ; procedure to call if id not in env
                   "variable not found in environment: ~s" id)))))]
       [if-cexp (test then-op else-op)
-        (if (value (eval-exp test env))
+        (if (de-refer (eval-exp test env))
           (eval-exp then-op env)
           (eval-exp else-op env))]
       [lambda-cexp (vars body)
         (refer (closure vars body env))]
       [set!-cexp (var val)
         (let ([ref (eval-exp (var-cexp var) env)])
-          (modify! ref (eval-exp val env)))]
+          (modify! ref (de-refer (eval-exp val env))))
+        (refer (void))]
       [define-cexp (var val)
-        ; (let ([ref (eval-exp val env)])
-          (define-in-env! env var (eval-exp val env))
-          (refer)
-          ; (modify! ref val))
-        ]
+        (define-in-env! env var (eval-exp val env))
+        (refer (void))]
       [app-cexp (rator rands)
         (let ([procref (eval-exp rator env)]
               [argsref (map (lambda(x) (eval-exp x env)) rands)])
@@ -368,55 +380,49 @@
 ;  Apply a procedure to its arguments.
 ;  At this point, we only have primitive procedures.  
 ;  User-defined procedures will be added later.
+; arguments:
+;   proc-r: reference of a procedure, not de-referred
+;   args: list of arguments, the list is not referred, but each arg is referred
 (define apply-proc
-  (lambda (proc-r args)
-    (let ([proc-v (value proc-r)])
+  (lambda (proc-r args) ; args should not have been de-referred
+    (let ([proc-v (de-refer proc-r)])
       (cases proc-val proc-v
-        [prim-proc (op) (refer (apply-prim-proc op (map value args)))]
+        [prim-proc (op) (refer (apply-prim-proc op (map de-refer args)))]
         [special-proc (op)
           (case op
             [(apply)
               (if (null? (cdr args))
                 (eopl:error 'apply "with no argument ~s" proc-v))
               (apply-proc (car args)
-                (let loop ([nextarg (cadr args)][leftarg (cddr args)]) ; Caution: No error-checking for 0 args
+                (let loop ([nextarg (cadr args)] [leftarg (cddr args)]) ; Caution: No error-checking for 0 args
                   (if (null? leftarg)
-                    (if (list? nextarg)
-                      (map refer (value nextarg))
-                      (eopl:error 'apply "The last argument of apply should be a list of arguments ~s" nextarg))
+                    (if (list? (de-refer nextarg))
+                      (map refer (de-refer nextarg))
+                      (eopl:error 'apply "The last argument of apply should be a proper list of arguments ~s" nextarg))
                     (cons nextarg (loop (car leftarg) (cdr leftarg))))))]
             [(call-with-values)
               (if (not (= 2 (length args)))
-                (eopl:error 'call-with-values "call-with-values takes two parameter producer and consumer: ~s" args))
+                (eopl:error 'call-with-values "call-with-values takes two parameters: a producer and a consumer: ~s" args))
               (let ([ret (apply-proc (car args) '())])
-                (apply-proc (cadr args) (map refer (values-aslist ret))))]
-            [(values)
-              (apply refer (map value args))])]
-  	 ;  [closure (len vars body env)
-     ;      (if (if lastVar
-     ;            (> len (length args))
-     ;            (not (= len (length args))))
-     ;        (eopl:error 'apply-proc "incorrect number of argument: closure ~a ~a" proc-v args))
-     ;      (let lambdaEval ([code body][env (extend-env vars args env)])
-     ;        (if (null? (cdr code))
-     ;          (eval-exp (car code) env)
-     ;          (begin (eval-exp (car code) env)
-     ;            (lambdaEval (cdr code) env))))]
+                (if (reference? ret)
+                  (apply-proc (cadr args) (list ret))
+                  (apply-proc (cadr args) ret)))]
+            [(values) args])]
         [closure (vars body env)
           (let lambdaEval ([code body]
             [env 
               (if (list? vars)
                 (if (= (length vars)(length args))
-                  (extend-env vars (map (lambda(x)(refer (value x))) args)  env)
+                  (extend-env vars (map (lambda(x)(refer (de-refer x))) args)  env)
                   (eopl:error 'apply-proc "incorrect number of argument: closure ~a ~a" proc-v args))
                 (extend-env (implst->list vars)
-                  (map (lambda(x) (refer (value x)))
+                  (map (lambda(x) (refer (de-refer x)))
                     (let loop ([vars vars][args args]) ; match all parts of args to vars
                       (if (pair? vars)
                         (if (pair? args)
-                          (cons (car args) (loop (cdr vars)(cdr args)))
+                          (cons (car args) (loop (cdr vars) (cdr args)))
                           (eopl:error 'apply-proc "not enough arguments: closure ~a ~a" proc-v args))
-                        (list (refer (map value args))))))
+                        (list (refer (map de-refer args))))))
                   env))])
             (if (null? (cdr code))
               (eval-exp (car code) env)
@@ -428,7 +434,8 @@
 
 (define *spec-proc-names* '(apply values call-with-values))
 (define *prim-proc-names* '(+ - * / add1 sub1 zero? not = < > <= >= cons list null? assq eq?
-                            eqv? equal? atom? car cdr length list->vector list? pair? append list-tail procedure?
+                            eqv? equal? atom? car caar caaar caadr cadar cdaar caddr cdadr cddar cdddr cadr cdar
+                            cddr cdr length list->vector list? pair? append list-tail procedure?
                             vector->list vector make-vector vector-ref vector? number? symbol? set-car! set-cdr!
                             vector-set! display newline void quotient))
 
@@ -445,6 +452,11 @@
 
 ; Usually an interpreter must define each 
 ; built-in procedure individually.  We are "cheating" a little bit.
+; arguments:
+;   prim-proc: the primitive procedure, de-referred
+;   args: the list of arguments, de-referred
+; returns:
+;   single value, not referred
 (define apply-prim-proc
   (lambda (prim-proc args)
     (case prim-proc
@@ -470,6 +482,18 @@
       [(equal?) (apply equal? args)]
       [(atom?) (apply atom? args)]
       [(car) (apply car args)]
+      [(caar) (apply caar args)]
+      [(caaar) (apply caaar args)]
+      [(caadr) (apply caadr args)]
+      [(cadar) (apply cadar args)]
+      [(cdaar) (apply cdaar args)]
+      [(caddr) (apply caddr args)]
+      [(cdadr) (apply cdadr args)]
+      [(cddar) (apply cddar args)]
+      [(cdddr) (apply cdddr args)]
+      [(cadr) (apply cadr args)]
+      [(cdar) (apply cdar args)]
+      [(cddr) (apply cddr args)]
       [(cdr) (apply cdr args)]
       [(length) (apply length args)]
       [(list->vector) (apply list->vector args)]
@@ -498,8 +522,6 @@
 
 
 ; Other Utility Methods
-
-
 (define implst->list
   (letrec ([loop (lambda (vars)
     (if (pair? vars)
@@ -507,15 +529,10 @@
         (list vars)))])
   loop))
 
-
-
 (define list-set-at-index!
   (lambda (ls ind val)
     (if (= 0 ind) (set-car! ls val)
       (list-set-at-index! (cdr ls) (- ind 1) val))))
-
-
-
 
 (load "syntaxExpansion.ss")
 (load "procdedures.ss")

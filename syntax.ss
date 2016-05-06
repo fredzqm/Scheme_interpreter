@@ -69,7 +69,7 @@
               (define-in-env! global-syntax-env
                 keyword
                 (map (lambda (x) (parse-syntax-result-pair (car x)(cdr x) constantls)) rulesls)))
-          (refer)))))
+          (refer (void))))))
 
 
 

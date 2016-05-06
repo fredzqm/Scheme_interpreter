@@ -13,7 +13,7 @@
   (empty-env-record)
   (extended-env-record
    (vals list?)
-   (alist (list-of (lambda(x))))
+   ; (alist (list-of (lambda(x)))) ; This is invalid syntax
    (env environment?)))
 
 ; Environment definitions for CSSE 304 Scheme interpreter.  Based on EoPL section 2.3
@@ -31,9 +31,9 @@
           (if (null? vals)
             (apcont k '())
             (eopl:error 'extend-env "Incorrect number of argument, syms: ~s, vals: ~s" syms vals))]
-        [(symbol? sym)
+        [(symbol? sym) ; in case syms is an improper list, this case handles that
           (apcont k (list val))]
-        [else
+        [else ; the regular case
           (if (null? val)
             (eopl:error 'extend-env "Incorrect number of argument, syms: ~s, vals: ~s" syms vals)
             (loop (cdr sym) (cdr val)
