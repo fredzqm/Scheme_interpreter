@@ -3,6 +3,10 @@
 ;:  Single-file version of the interpreter.
 ;; Easier to submit to server, probably harder to use in the development process
 
+(define apcont
+  (lambda (k . x)
+    (apply k x)))
+
 (define (implist-of pred?)
   (lambda(implst)
     (let helper ([ls implst])
@@ -30,7 +34,7 @@
 
 ; the core expression of scheme. Syntax expansion should convert all code to core scheme.
 (define-datatype cexpression cexpression?
-  [var-cexp (id symbol?)]
+  [var-cexp (varinfo pair?)]
   [lit-cexp
        (datum (lambda (x)
           (ormap (lambda (pred) (pred x))
@@ -45,7 +49,7 @@
       (test cexpression?)
       (then-op cexpression?)
       (else-op cexpression?)]
-  [set!-cexp (var symbol?)
+  [set!-cexp (varinfo pair?)
       (val cexpression?)]
   [define-cexp (var symbol?)
       (val cexpression?)])
@@ -69,7 +73,7 @@
     (variableLength boolean?)
     (ref-map (implist-of boolean?))
     (body (list-of cexpression?))
-    (env environment?)])   
+    (env list?)])   
 
 
 ;-------------------+
@@ -77,6 +81,144 @@
 ;   ENVIRONMENTS    |
 ;                   |
 ;-------------------+
+;-------------------+
+;                   |
+; ENVIRON TEMPLETE  |
+;                   |
+;-------------------+
+
+(define (empty-templete)
+  '())
+
+; create another level of environment
+(define (extend-templete syms env)
+  (if (not ((list-of symbol?) syms))
+    (eopl:error 'extend-templete "syms should be a list of symbols ~s" syms))
+  (cons (list syms) env))
+
+; add a posible symbol to this level
+(define (add-sym-templete sym env k)
+  (if (not (symbol? sym))
+    (eopl:error 'add-sym-templete "sym should be a symbol ~s" sym))
+  (apcont k 
+    (if (or (member sym (caar env)) (member sym (cdar env)))
+      env
+      (cons
+        (cons (caar env) (cons sym (cdar env)))
+        (cdr env)))))
+
+; return a var-cexp represented in lexical order.
+; variable representation
+; free var: '(name 0)
+; bounded var: '(name depth . index)
+; search free var: '(name d1 d2 d3 ...)
+; search bounded var: '(name d1 d2 d3 ... depth . index)
+(define (search-in-templete env sym)
+  (let helper ([env env]
+      [k (lambda (num ls)
+        (if num
+          (cons* sym num ls)
+          (cons sym ls)))])
+    (if (null? env)
+        (apcont k #f '())
+        (index-in-ls sym (caar env)
+          (lambda(lexiIndex)
+            (if lexiIndex
+              (apcont k 0 lexiIndex)
+              (helper (cdr env)
+                (lambda (num ls)
+                  (if num
+                    (index-in-ls sym (cdar env)
+                      (lambda (posible)
+                        (if posible
+                          (apcont k 0 (cons num ls))
+                          (apcont k (+ num 1) ls))))
+                    (index-in-ls sym (cdar env)
+                      (lambda (posible)
+                        (if posible
+                          (apcont k 0 '())
+                          (apcont k #f '())))))))))))))
+
+(define (index-in-ls sym ls k)
+  (if (null? ls)
+    (apcont k #f)
+    (if (eq? sym (car ls))
+      (apcont k 0)
+      (index-in-ls sym (cdr ls)
+        (lambda (x)
+          (apcont k (and x (+ 1 x))))))))
+
+;-------------------+
+;                   |
+; LOCAL ENVIRONMENT |
+;                   |
+;-------------------+
+
+(define (apply-local-env env info succeed fail)
+  (let ([sym (car info)])
+    (if (null? (cdr info))
+      (apply-global-env sym succeed fail)
+      (let helper ([carls (cadr info)][cdrls (cddr info)][env env])
+        (if (= carls 0)
+          (if (integer? cdrls)
+            (apcont succeed (vector-ref (caar env) cdrls))
+            (apply-env (cdar env) sym
+              succeed
+              (lambda ()
+                (if (null? cdrls)
+                  (apply-global-env sym succeed fail)
+                  (helper (car cdrls)(cdr cdrls) (cdr env))))))
+          (helper (- carls 1) cdrls (cdr env)))))))
+
+
+(define (apply-global-env sym succeed fail)
+  (apply-env global-env sym succeed fail))
+
+(define (extend-local-env vary? ref-map args env succeed fail)
+  (let helper ([ref-map ref-map][args args]
+              [k (lambda (curLevel)
+                    (apcont succeed 
+                      (cons 
+                        (cons 
+                          (list->vector curLevel)
+                          (empty-env))
+                        env)))])
+    ; (if (null? args)
+    ;   (if (null? ref-map)
+    ;     (if vary?
+    ;       (apcont k (list (refer '())))
+    ;       (apcont k '()))
+    ;     (apcont fail))
+    ;   (if (null? ref-map)
+    ;     (if vary?
+    ;       (apcont k (list (refer (map de-refer args))))
+    ;       (apcont fail))
+    ;     (helper (cdr ref-map) (cdr args)
+    ;         (lambda (cdrVal)
+    ;           (apcont k
+    ;             (cons 
+    ;               (if (car ref-map) 
+    ;                 (car args) 
+    ;                 (refer (de-refer (car args))))
+    ;               cdrVal))))))
+    
+    (if (null? ref-map)
+      (if vary?
+        (apcont k (list (refer (map de-refer args))))
+        (if (null? args)
+          (apcont k '())
+          (apcont fail)))
+      (if (null? args)
+        (apcont fail)
+        (helper (cdr ref-map) (cdr args)
+            (lambda (cdrVal)
+              (apcont k
+                (cons 
+                  (if (car ref-map) 
+                    (car args) 
+                    (refer (de-refer (car args))))
+                  cdrVal))))))
+    ))
 
 ; Environment definitions for CSSE 304 Scheme interpreter.  Based on EoPL section 2.3
 (define empty-env
@@ -183,10 +325,10 @@
 (define 3rd caddr)
 
 (define parse-exp
-  (lambda (datum boundVars)
-     (let ([curlev-parse (lambda (exp) (parse-exp exp boundVars))])
+  (lambda (datum templete)
+     (let ([curlev-parse (lambda (exp) (parse-exp exp templete))])
         (cond
-          [(symbol? datum) (var-cexp datum)]
+          [(symbol? datum) (var-cexp (search-in-templete templete datum))]
           [(number? datum) (lit-cexp datum)]
           [(vector? datum) (lit-cexp datum)]
           [(boolean? datum) (lit-cexp datum)]
@@ -195,17 +337,17 @@
           [(pair? datum)
             (let ([rator (car datum)][rands (cdr datum)])
               (if (symbol? rator)
-                (if (slist-contain? rator boundVars)
-                  (app-cexp (var-cexp rator) (map curlev-parse rands)) ; occur bound
+                (if (slist-contain? rator templete)
+                  (app-cexp (curlev-parse rator) (map curlev-parse rands)) ; occur bound
                   (apply-env global-syntax-env rator ; occur free
                     (lambda (expanRules) (apply-syntax expanRules datum
                       (lambda(x)(curlev-parse x))
                       (lambda() (apply-env core-syntax-env rator
-                        (lambda(coreRules) (apply-core-syntax coreRules datum boundVars)) ; does proper syntax exapnsion
+                        (lambda(coreRules) (apply-core-syntax coreRules datum templete)) ; does proper syntax exapnsion
                         (lambda() (eopl:error 'syntax-expansion "Invalid sytanx ~s" datum)))))) ; try syntax exapnsion but failed
                     (lambda() (apply-env core-syntax-env rator
-                      (lambda(coreRules) (apply-core-syntax coreRules datum boundVars))
-                      (lambda() (app-cexp (var-cexp rator) (map curlev-parse rands)))))))
+                      (lambda(coreRules) (apply-core-syntax coreRules datum templete))
+                      (lambda() (app-cexp (curlev-parse rator) (map curlev-parse rands)))))))
                 (app-cexp (curlev-parse rator) (map curlev-parse rands))))]
           [else (eopl:error 'parse-exp "bad expression: ~s" datum)]))))
 
@@ -218,9 +360,9 @@
         (fail)))))
       
 (define apply-core-syntax
-  (lambda (coreSyntax exp boundVars)
+  (lambda (coreSyntax exp templete)
     (let ([sym (car exp)][body (cdr exp)]
-          [curlev-parse (lambda (exp) (parse-exp exp boundVars))])
+          [curlev-parse (lambda (exp) (parse-exp exp templete))])
       (or (ormap (lambda(x) (matchpattern x body)) coreSyntax)
         (eopl:error 'apply-core-syntax "Invalid core expression format ~s" exp))
       (case sym
@@ -237,26 +379,26 @@
         ;         [extr-var (lambda (obj)
         ;                     (if (symbol? obj) obj (cadr obj)))])
         ;     (let ([ref-map (implst-map ref? vars-list)]
-        ;           [boundVars (implst-map extr-var vars-list)])
-        ;       (let ([innerboundVars (cons (car body) boundVars)])
+        ;           [templete (implst-map extr-var vars-list)])
+        ;       (let ([innertemplete (cons (car body) templete)])
         ;         (lambda-cexp
-        ;           boundVars
+        ;           templete
         ;           ref-map
-        ;           (map (lambda(exp) (parse-exp exp innerboundVars)) (cdr body))))))]
+        ;           (map (lambda(exp) (parse-exp exp innertemplete)) (cdr body))))))]
         [(lambda)
           (let helper ([varls (car body)]
-                      [k (lambda (vars ref-map lastVar)
+                      [k (lambda (vars ref-map)
                           (lambda-cexp 
                             vars 
                             ref-map
-                            (let ([innerboundVars (cons vars boundVars)])
-                              (map (lambda(exp) (parse-exp exp innerboundVars)) (cdr body)))))])
+                            (let ([innertemplete (extend-templete vars templete)])
+                              (map (lambda(exp) (parse-exp exp innertemplete)) (cdr body)))))])
               (cond
                 [(null? varls) (apcont k '() '())]
                 [(symbol? varls) (apcont k (list varls) '())]
                 [(pair? varls)
                   (helper (cdr varls)
-                    (lambda (cdrVars ref-map)
+                    (lambda (cdrVars cdrref-map)
                       (cond
                         [(symbol? (car varls))
                           (apcont k
@@ -277,7 +419,7 @@
             (curlev-parse (caddr body)))]
         [(set!)
           (set!-cexp
-            (car body)
+            (search-in-templete templete (car body))
             (curlev-parse (cadr body)))]
         [(define)
           (define-cexp
@@ -353,7 +495,7 @@
     (cond
       [(and (pair? form) (eq? (car form) 'define-syntax)
         (eval-define-syntax (cdr form)))]
-      [else (eval-exp (parse-exp form '()) (empty-env))])))
+      [else (eval-exp (parse-exp form (empty-templete)) (empty-env))])))
 
 
 ; these three functions define ADT reference, the return value of eval-exp
@@ -392,14 +534,10 @@
   (lambda (exp env)
     (cases cexpression exp
       [lit-cexp (datum) (refer datum)]
-      [var-cexp (id)
-				(apply-env env id ; look up its value.
-      	   (lambda (x) x) ; procedure to call if id is in the environment 
-           (lambda ()
-             (apply-env global-env id
-                (lambda (x) x)
-                (lambda () (eopl:error 'apply-env ; procedure to call if id not in env
-                  "variable not found in environment: ~s" id)))))]
+      [var-cexp (varinfo)
+				(apply-local-env env varinfo ; look up its value.
+    	   (lambda (x) x) ; procedure to call if id is in the environment 
+         (lambda () (eopl:error 'apply-local-env "variable not found in environment: ~s" varinfo)))]
       [if-cexp (test then-op else-op)
         (if (de-refer (eval-exp test env))
           (eval-exp then-op env)
@@ -407,9 +545,10 @@
       [lambda-cexp (vars ref-map body)
         (refer (closure (not (= (length vars)(length ref-map)))
                         ref-map body env))]
-      [set!-cexp (var val)
-        (let ([ref (eval-exp (var-cexp var) env)])
-          (modify! ref (de-refer (eval-exp val env))))
+      [set!-cexp (varinfo val)
+        (apply-local-env env varinfo
+          (lambda(ref) (modify! ref (de-refer (eval-exp val env))))
+          (lambda() (define-in-env! env (eval-exp val env))))
         (refer (void))]
       [define-cexp (var val)
         (define-in-env! env var (eval-exp val env))
@@ -452,7 +591,7 @@
             [(values) (apply refer (map de-refer args))])]
         [closure (vary? ref-map body env)
           (let lambdaEval ([code body]
-            [env (extend-env vary? ref-map args env
+            [env (extend-local-env vary? ref-map args env
                     (lambda (x) x)
                     (lambda () (eopl:error 'apply-proc "not enough arguments: closure ~a ~a" proc-v args)))])
               ; (if (list? vars)
@@ -587,4 +726,4 @@
 (load "procdedures.ss")
 (load "syntaxExpansion.ss")
 (addSyntaxExpansion)
-; (reset-global-env)
+(reset-global-env)
