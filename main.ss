@@ -86,28 +86,27 @@
   (cons (list syms) env))
 
 ; add a posible symbol to this level
-(define (add-sym-templete sym env k)
-  (if (not (symbol? sym))
-    (eopl:error 'add-sym-templete "sym should be a symbol ~s" sym))
-  (apcont k 
-    (if (or (member sym (caar env)) (member sym (cdar env)))
-      env
+(define (add-sym-templete! env sym)
+  (if (or (null? env) (member sym (caar env)) (member sym (cdar env)))
+    env
+    (cons
       (cons
-        (cons (caar env) (cons sym (cdar env)))
-        (cdr env)))))
+        (caar env) 
+        (cons sym (cdar env)))
+      (cdr env))))
 
 ; return a var-cexp represented in lexical order.
 ; variable representation
-; free var: '(name 0)
+; free var: '(name)
 ; bounded var: '(name depth . index)
-; search free var: '(name d1 d2 d3 ...)
-; search bounded var: '(name d1 d2 d3 ... depth . index)
-(define (search-in-templete env sym)
+; uncertain free var: '(name d1 d2 d3 ...)
+; uncertain bounded var: '(name d1 d2 d3 ... depth . index)
+(define (search-in-templete env sym bounded free)
   (let helper ([env env]
       [k (lambda (num ls)
         (if num
-          (cons* sym num ls)
-          (cons sym ls)))])
+          (apcont bounded (cons* sym num ls))
+          (apcont free (cons sym ls))))])
     (if (null? env)
         (apcont k #f '())
         (index-in-ls sym (caar env)
@@ -151,22 +150,19 @@
 (define (apply-local-env env info succeed fail)
   (let ([sym (car info)])
     (if (null? (cdr info))
-      (apply-global-env sym succeed fail)
+      (search-table global-env sym succeed fail)
       (let helper ([carls (cadr info)][cdrls (cddr info)][env env])
         (if (= carls 0)
           (if (integer? cdrls)
             (apcont succeed (vector-ref (caar env) cdrls))
-            (apply-env (cdar env) sym
+            (search-table (cdar env) sym
               succeed
               (lambda ()
                 (if (null? cdrls)
-                  (apply-global-env sym succeed fail)
+                  (search-table global-env sym succeed fail)
                   (helper (car cdrls)(cdr cdrls) (cdr env))))))
           (helper (- carls 1) cdrls (cdr env)))))))
 
-
-(define (apply-global-env sym succeed fail)
-  (apply-env global-env sym succeed fail))
 
 (define (extend-local-env vary? ref-map args env succeed fail)
   (let helper ([ref-map ref-map][args args]
@@ -175,7 +171,7 @@
                       (cons 
                         (cons 
                           (list->vector curLevel)
-                          (empty-env))
+                          (empty-table))
                         env)))])
     (if (null? ref-map)
       (if vary?
@@ -195,12 +191,45 @@
                   cdrVal))))))))
 
 
+(define (define-in-local-env! env sym val)
+  (if (null? env)
+    (update-table! global-env sym val)
+    (update-table! (cdar env) sym val)))
+
 ;-------------------+
 ;                   |
 ; GLOBAL ENVIRONMENT|
 ;                   |
 ;-------------------+
 
+(define (empty-table)
+  (make-hashtable 
+    (lambda(s)(string-length (symbol->string s)))
+    symbol=?))
+
+; Environment definitions for CSSE 304 Scheme interpreter.  Based on EoPL section 2.3
+(define create-table
+  (lambda (syms vals)
+    (if (not (= (length syms)(length vals)))
+      (eopl:error 'create-table "syms and vals has different length syms ~s vals" syms vals))
+    (let ([env (empty-table)])
+      (let loop ([syms syms][vals vals])
+        (if (null? syms)
+          env
+          (begin
+            (update-table! env (car syms) (car vals))
+            (loop (cdr syms)(cdr vals))))))))
+
+(define search-table
+  (lambda (env sym succeed fail) ; succeed and fail are procedures applied if the var is or isn't found, respectively.
+    (if (hashtable-contains? env sym)
+      (apcont succeed (hashtable-ref env sym #f))
+      (apcont fail))))
+
+
+(define update-table!
+  (lambda (env sym val)
+    (hashtable-set! env sym val)))
 
 
 
@@ -211,10 +240,7 @@
 ;-------------------+
 
 
-; This is a parser for simple Scheme expressions, such as those in EOPL, 3.1 thru 3.3.
-
 ; You will want to replace this with your parser that includes more expression types, more options for these types, and error-checking.
-
 ; Procedures to make the parser a little bit saner.
 (define 1st car)
 (define 2nd cadr)
@@ -224,7 +250,9 @@
   (lambda (datum templete)
      (let ([curlev-parse (lambda (exp) (parse-exp exp templete))])
         (cond
-          [(symbol? datum) (var-cexp (search-in-templete templete datum))]
+          [(symbol? datum) (search-in-templete templete datum
+                              (lambda (bounded) (var-cexp bounded))
+                              (lambda (free) (var-cexp free)))]
           [(number? datum) (lit-cexp datum)]
           [(vector? datum) (lit-cexp datum)]
           [(boolean? datum) (lit-cexp datum)]
@@ -233,17 +261,19 @@
           [(pair? datum)
             (let ([rator (car datum)][rands (cdr datum)])
               (if (symbol? rator)
-                (if (slist-contain? rator templete)
-                  (app-cexp (curlev-parse rator) (map curlev-parse rands)) ; occur bound
-                  (apply-env global-syntax-env rator ; occur free
-                    (lambda (expanRules) (apply-syntax expanRules datum
-                      (lambda(x)(curlev-parse x))
-                      (lambda() (apply-env core-syntax-env rator
-                        (lambda(coreRules) (apply-core-syntax coreRules datum templete)) ; does proper syntax exapnsion
-                        (lambda() (eopl:error 'syntax-expansion "Invalid sytanx ~s" datum)))))) ; try syntax exapnsion but failed
-                    (lambda() (apply-env core-syntax-env rator
-                      (lambda(coreRules) (apply-core-syntax coreRules datum templete))
-                      (lambda() (app-cexp (curlev-parse rator) (map curlev-parse rands)))))))
+                (search-in-templete templete rator
+                  (lambda (bounded)
+                    (app-cexp (var-cexp bounded) (map curlev-parse rands))) ; occur bounded
+                  (lambda (free)
+                    (search-table global-syntax-env rator ; occur free
+                      (lambda (expanRules) (apply-syntax expanRules datum
+                        (lambda(x)(curlev-parse x))
+                        (lambda() (search-table core-syntax-env rator
+                          (lambda(coreRules) (apply-core-syntax coreRules datum templete)) ; does proper syntax exapnsion
+                          (lambda() (eopl:error 'syntax-expansion "Invalid sytanx ~s" datum)))))) ; try syntax exapnsion but failed
+                      (lambda() (search-table core-syntax-env rator
+                        (lambda(coreRules) (apply-core-syntax coreRules datum templete))
+                        (lambda() (app-cexp (var-cexp free) (map curlev-parse rands))))))))
                 (app-cexp (curlev-parse rator) (map curlev-parse rands))))]
           [else (eopl:error 'parse-exp "bad expression: ~s" datum)]))))
 
@@ -289,9 +319,7 @@
                           (apcont k
                             (cons (cadar varls) cdrVars)
                             (cons #t cdrRef-map))]
-                        [else (eopl:error 'lambda-cexp "In correct format of lambda expression ~s" (cons 'lambda body))])
-                      ))])
-            )]
+                        [else (eopl:error 'lambda-cexp "In correct format of lambda expression ~s" (cons 'lambda body))])))]))]
         [(if)
           (if-cexp
             (curlev-parse (car body))
@@ -299,9 +327,11 @@
             (curlev-parse (caddr body)))]
         [(set!)
           (set!-cexp
-            (search-in-templete templete (car body))
+            (search-in-templete templete (car body)
+              (lambda (x) x) (lambda (x) x))
             (curlev-parse (cadr body)))]
         [(define)
+          (add-sym-templete! templete (car body))
           (define-cexp
             (car body)
             (curlev-parse (cadr body)))]
@@ -315,11 +345,11 @@
 ;-----------------------+
 
 (define global-syntax-env
-  (create-env '() '()))
+  (create-table '() '()))
 
 ; To be added with define-syntax
 (define core-syntax-env 
-  (create-env
+  (create-table
     '(quote lambda if set! define)
     (list 
       (list ; quote
@@ -376,7 +406,6 @@
         (eval-define-syntax (cdr form)))]
       [else (eval-exp (parse-exp form (empty-templete)) (empty-local-env))])))
 
-
 ; these three functions define ADT reference, the return value of eval-exp
 (define (refer . a) 
   (cond
@@ -427,10 +456,10 @@
       [set!-cexp (varinfo val)
         (apply-local-env env varinfo
           (lambda(ref) (modify! ref (de-refer (eval-exp val env))))
-          (lambda() (define-in-env! global-env (eval-exp val env))))
+          (lambda() (update-table! global-env (eval-exp val env))))
         (refer)]
       [define-cexp (var val)
-        (define-in-env! global-env var (eval-exp val env))
+        (define-in-local-env! env var (eval-exp val env))
         (refer)]
       [app-cexp (rator rands)
         (let ([procref (eval-exp rator env)]
@@ -477,7 +506,6 @@
               (eval-exp (car code) env)
               (begin (eval-exp (car code) env)
                 (lambdaEval (cdr code) env))))]
-        ; You will add other cases
         [else (eopl:error 'apply-proc "Attempt to apply bad procedure: ~s" proc-v)]))))
 
 
@@ -490,7 +518,7 @@
 
 (define (reset-global-env)
   (set! global-env
-    (create-env
+    (create-table
        (append *spec-proc-names* *prim-proc-names*)
        (append 
           (map (lambda(x) (refer (special-proc x))) *spec-proc-names*)
@@ -566,27 +594,6 @@
       [else (error 'apply-prim-proc 
             "Bad primitive procedure name: ~s" 
             prim-proc)])))
-
-
-; ; Other Utility Methods
-
-
-
-
-
-; (define implst-map ; No error checking for now
-;   (lambda (f ls . more)
-;     (letrec ([map-one-implist
-;             (lambda (ls)
-;               (cond
-;                 [(and (not (pair? ls)) (not (null? ls))) (f ls)]
-;                 [(null? ls) '()]
-;                 [else (cons (f (car ls)) (map-one-implist (cdr ls)))]))])
-;       (if (null? more)
-;         (map-one-implist ls)
-;         (apply map map-one-implist ls more)))))
-
-
 
 (addSyntaxExpansion)
 (reset-global-env)
