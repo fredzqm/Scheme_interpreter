@@ -22,6 +22,9 @@
 
 (load "chez-init.ss")
 (load "syntax.ss")
+(load "procedure_init.ss")
+(load "environment.ss")
+(load "syntax_expansion_init.ss")
 
 ;-------------------+
 ;                   |
@@ -30,8 +33,6 @@
 ;-------------------+
 
 ; parsed expression
-
-
 ; the core expression of scheme. Syntax expansion should convert all code to core scheme.
 (define-datatype cexpression cexpression?
   [var-cexp (varinfo pair?)]
@@ -54,13 +55,6 @@
   [define-cexp (var symbol?)
       (val cexpression?)])
 
-; environment type definitions
-(define-datatype environment environment?
-  (empty-env-record)
-  (extended-env-record
-   (syms (list-of (lambda(x) (or (not x)(symbol? x)))))
-   (vals list?)
-   (env environment?)))
 
 ; datatype for procedures.  At first there is only one
 ; kind of procedure, but more kinds will be added later.
@@ -76,11 +70,6 @@
     (env list?)])   
 
 
-;-------------------+
-;                   |
-;   ENVIRONMENTS    |
-;                   |
-;-------------------+
 ;-------------------+
 ;                   |
 ; ENVIRON TEMPLETE  |
@@ -139,6 +128,7 @@
                           (apcont k 0 '())
                           (apcont k #f '())))))))))))))
 
+; a helper method for templete
 (define (index-in-ls sym ls k)
   (if (null? ls)
     (apcont k #f)
@@ -147,6 +137,7 @@
       (index-in-ls sym (cdr ls)
         (lambda (x)
           (apcont k (and x (+ 1 x))))))))
+
 
 ;-------------------+
 ;                   |
@@ -183,25 +174,6 @@
                           (list->vector curLevel)
                           (empty-env))
                         env)))])
-    ; (if (null? args)
-    ;   (if (null? ref-map)
-    ;     (if vary?
-    ;       (apcont k (list (refer '())))
-    ;       (apcont k '()))
-    ;     (apcont fail))
-    ;   (if (null? ref-map)
-    ;     (if vary?
-    ;       (apcont k (list (refer (map de-refer args))))
-    ;       (apcont fail))
-    ;     (helper (cdr ref-map) (cdr args)
-    ;         (lambda (cdrVal)
-    ;           (apcont k
-    ;             (cons 
-    ;               (if (car ref-map) 
-    ;                 (car args) 
-    ;                 (refer (de-refer (car args))))
-    ;               cdrVal))))))
-    
     (if (null? ref-map)
       (if vary?
         (apcont k (list (refer (map de-refer args))))
@@ -217,97 +189,18 @@
                   (if (car ref-map) 
                     (car args) 
                     (refer (de-refer (car args))))
-                  cdrVal))))))
-    ))
-
-; Environment definitions for CSSE 304 Scheme interpreter.  Based on EoPL section 2.3
-(define empty-env
-  (lambda ()
-    (empty-env-record)))
-
-(define extend-env
-  (lambda (syms vals env)
-    (if (not (= (length syms)(length vals)))
-      (eopl:error 'extend-env "syms and vals has different length syms ~s vals" syms vals))
-    (if (null? syms)
-      (extended-env-record (list #f) (list #f) env)
-      (extended-env-record syms vals env))))
-
-(define list-find-position
-  (lambda (sym los)
-    (list-index (lambda (xsym) (eqv? sym xsym)) los)))
-
-(define list-index
-  (lambda (pred ls)
-    (cond
-     ((null? ls) #f)
-     ((pred (car ls)) 0)
-     (else (let ((list-index-r (list-index pred (cdr ls))))
-       (if (number? list-index-r)
-     (+ 1 list-index-r)
-     #f))))))
-
-(define apply-env
-  (lambda (env sym succeed fail) ; succeed and fail are procedures applied if the var is or isn't found, respectively.
-    (cases environment env
-      (empty-env-record ()
-        (fail))
-      (extended-env-record (syms vals env)
-        (let ((pos (list-find-position sym syms)))
-          (if (number? pos)
-            (succeed (list-ref vals pos))
-            (apply-env env sym succeed fail)))))))
-
-(define add-to-env!
-  (letrec ([helper! (lambda (ls val)
-                      (if (null? (cdr ls))
-                        (if (car ls) ; if the list is initially empty, which has a #f in it
-                          (set-cdr! ls (list val))
-                          (set-car! ls val))
-                        (helper! (cdr ls) val)))])
-    (lambda (env sym val)
-      (cases environment env
-        (empty-env-record () 
-          (eopl:error 'add-to-env! "Cannot add to the end of an empty environment"))
-        (extended-env-record (syms vals env)
-          (helper! syms sym)
-          (helper! vals val))))))
-
-(define change-env!
-  (lambda (env sym val)
-    (cases environment env
-      (empty-env-record () (change-env! global-env sym val)) ; At top level
-      (extended-env-record (syms vals encl_env)
-        (let ((pos (list-find-position sym syms)))
-          (if (number? pos)
-            (list-set-at-index! vals pos val) ; Value is found
-            (if (eq? env global-env)
-              (add-to-env! env sym val)
-              (change-env! encl_env sym val))))))))
-
-(define define-in-env!
-  (lambda (env sym val)
-    (cases environment env
-      (empty-env-record () (define-in-env! global-env sym val)) ; At top level
-      (extended-env-record (syms vals encl_env)
-        (let ((pos (list-find-position sym syms)))
-          (if (number? pos)
-            (list-set-at-index! vals pos val) ; Value is found
-            (add-to-env! env sym val) ; We don't care if it is in global; if it's not found in the current scope, it just needs to be added.
-            ))))))
+                  cdrVal))))))))
 
 
-(define list-set-at-index!
-  (lambda (ls ind val)
-    (if (= 0 ind) (set-car! ls val)
-      (list-set-at-index! (cdr ls) (- ind 1) val))))
+;-------------------+
+;                   |
+; GLOBAL ENVIRONMENT|
+;                   |
+;-------------------+
 
-(define implst->list
-  (letrec ([loop (lambda (vars)
-    (if (pair? vars)
-        (cons (car vars) (loop (cdr vars)))
-        (list vars)))])
-  loop))
+
+
+
 ;-------------------+
 ;                   |
 ;    PARSER         |
@@ -369,22 +262,6 @@
         [(quote)
           (lit-cexp
             (car body))]
-        ; [(lambda)
-        ;   (let* ([vars-list (car body)]
-        ;         [ref? (lambda (obj)
-        ;                 (cond
-        ;                   [(symbol? obj) #f]
-        ;                   [(and (list? obj) (eqv? 'ref (car obj)) (symbol? (cadr obj))) #t]
-        ;                   [else (eopl:error 'apply-core-syntax "Invalid argument declaration: ~s" vars-list)]))]
-        ;         [extr-var (lambda (obj)
-        ;                     (if (symbol? obj) obj (cadr obj)))])
-        ;     (let ([ref-map (implst-map ref? vars-list)]
-        ;           [templete (implst-map extr-var vars-list)])
-        ;       (let ([innertemplete (cons (car body) templete)])
-        ;         (lambda-cexp
-        ;           templete
-        ;           ref-map
-        ;           (map (lambda(exp) (parse-exp exp innertemplete)) (cdr body))))))]
         [(lambda)
           (let helper ([varls (car body)]
                       [k (lambda (vars ref-map)
@@ -435,11 +312,11 @@
 ;-----------------------+
 
 (define global-syntax-env
-  (extend-env '() '() (empty-env)))
+  (create-env '() '()))
 
 ; To be added with define-syntax
 (define core-syntax-env 
-  (extend-env
+  (create-env
     '(quote lambda if set! define)
     (list 
       (list ; quote
@@ -458,8 +335,7 @@
           (listpt (exprpt 'e) (emptpt))))
       (list ; define
         (listpt (sympt 'v)
-          (listpt (exprpt 'e) (emptpt)))))
-    (empty-env)))
+          (listpt (exprpt 'e) (emptpt)))))))
 
 
 
@@ -594,19 +470,6 @@
             [env (extend-local-env vary? ref-map args env
                     (lambda (x) x)
                     (lambda () (eopl:error 'apply-proc "not enough arguments: closure ~a ~a" proc-v args)))])
-              ; (if (list? vars)
-              ;   (if (= (length vars)(length args))
-              ;     (extend-env vars (map (lambda(x)(refer (de-refer x))) args)  env)
-              ;     (eopl:error 'apply-proc "incorrect number of argument: closure ~a ~a" proc-v args))
-              ;   (extend-env (implst->list vars)
-              ;     (map (lambda(x) (refer (de-refer x)))
-              ;       (let loop ([vars vars][args args]) ; match all parts of args to vars
-              ;         (if (pair? vars)
-              ;           (if (pair? args)
-              ;             (cons (car args) (loop (cdr vars) (cdr args)))
-              ;             (eopl:error 'apply-proc "not enough arguments: closure ~a ~a" proc-v args))
-              ;           (list (refer (map de-refer args))))))
-              ;     env))
             (if (null? (cdr code))
               (eval-exp (car code) env)
               (begin (eval-exp (car code) env)
@@ -624,12 +487,11 @@
 
 (define (reset-global-env)
   (set! global-env
-    (extend-env
+    (create-env
        (append *spec-proc-names* *prim-proc-names*)
        (append 
           (map (lambda(x) (refer (special-proc x))) *spec-proc-names*)
-          (map (lambda(x) (refer (prim-proc x))) *prim-proc-names*))
-       (empty-env)))
+          (map (lambda(x) (refer (prim-proc x))) *prim-proc-names*))))
   (addPredefinedProcedures))
 
 ; Usually an interpreter must define each 
@@ -723,7 +585,5 @@
 
 
 
-(load "procdedures.ss")
-(load "syntaxExpansion.ss")
 (addSyntaxExpansion)
 (reset-global-env)
