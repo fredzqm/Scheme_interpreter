@@ -155,6 +155,17 @@
             ))))))
 
 
+(define list-set-at-index!
+  (lambda (ls ind val)
+    (if (= 0 ind) (set-car! ls val)
+      (list-set-at-index! (cdr ls) (- ind 1) val))))
+
+(define implst->list
+  (letrec ([loop (lambda (vars)
+    (if (pair? vars)
+        (cons (car vars) (loop (cdr vars)))
+        (list vars)))])
+  loop))
 ;-------------------+
 ;                   |
 ;    PARSER         |
@@ -293,25 +304,17 @@
 (define rep      ; "read-eval-print" loop.
   (lambda ()
     (display "--> ")
-    (let ([answer (top-level-eval (read))])
-      (if (reference? answer)
+    (let displayLoop ([answers (de-refer-aslist (top-level-eval (read)))])
+      (if (null? answers)
+        (rep)
         (begin
-          (eopl:pretty-print (de-refer answer))
-          (rep))
-        (let displayLoop ([answers (map de-refer answer)])
-          (if (null? answers)
-            (rep)
-            (begin
-              (eopl:pretty-print (car answers))
-              (displayLoop (cdr answers)))))))))
+          (eopl:pretty-print (car answers))
+          (displayLoop (cdr answers)))))))
 
 ; the separate interpreter entry
 (define eval-one-exp
   (lambda (x) 
-    (let ([result (top-level-eval x)])
-      (if (reference? result)
-        (de-refer result)
-        (map de-refer result)))))
+    (apply values (de-refer-aslist (top-level-eval x)))))
 
 (define eval-many-exps
   (lambda (ls)
@@ -327,13 +330,32 @@
 
 
 ; these three functions define ADT reference, the return value of eval-exp
-(define refer box)
+(define (refer . a) 
+  (cond
+    [(null? a) '()]
+    [(null? (cdr a)) (box (car a))]
+    [else a]))
 
-(define de-refer unbox)
+(define (de-refer ref) 
+  (cond
+    [(box? ref) (unbox ref)]
+    [(null? ref) (void)]
+    [(and (list? ref) (< 1 (length ref)))
+      (eopl:error 'de-refer "Return multiple values ~s to single value environment" ref)]
+    [else (eopl:error 'de-refer "Try to de-reference Invalid reference ~s" ref)]))
 
-(define reference? box?)
+(define (de-refer-aslist ref)
+  (cond
+    [(null? ref) '()]
+    [(box? ref) (list (unbox ref))]
+    [(and (list? ref) (< 1 (length ref)))
+      ref]
+    [else (eopl:error 'de-refer-aslist "Try to de-reference Invalid reference ~s" ref)]))
 
-(define modify! set-box!)
+(define (modify! ref val) 
+  (if (not (box? ref))
+    (eopl:error 'modify! "Can only modify a reference with one value: ~s," ref)
+    (set-box! ref val)))
 
 ; eval-exp is the main component of the interpreter
 ; eval-exp should return a list of result.
@@ -366,11 +388,7 @@
         (refer (void))]
       [app-cexp (rator rands)
         (let ([procref (eval-exp rator env)]
-              [argsref (map (lambda(x) (let ([result (eval-exp x env)])
-                                          (cond
-                                            [(reference? result) result]
-                                            [(and (pair? result) (null? (cdr result))) (car result)]
-                                            [else (eopl:error 'eval-exp "returned ~d values to single value return context" (length result))]))) rands)])
+              [argsref (map (lambda(x) (eval-exp x env)) rands)])
           (apply-proc procref argsref))]
       [else (eopl:error 'eval-exp "Bad abstract syntax: ~a" exp)])))
 
@@ -402,10 +420,8 @@
               (if (not (= 2 (length args)))
                 (eopl:error 'call-with-values "call-with-values takes two parameters: a producer and a consumer: ~s" args))
               (let ([ret (apply-proc (car args) '())])
-                (if (reference? ret)
-                  (apply-proc (cadr args) (list ret))
-                  (apply-proc (cadr args) ret)))]
-            [(values) args])]
+                  (apply-proc (cadr args) (map refer (de-refer-aslist ret))))]
+            [(values) (apply refer (map de-refer args))])]
         [closure (vars ref-map body env)
           (let lambdaEval ([code body]
             [env 
@@ -471,7 +487,7 @@
       [(<=) (apply <= args)]
       [(>=) (apply >= args)]
       [(cons) (cons (1st args) (2nd args))]
-      [(list) (apply list args)]
+      [(list) args]
       [(null?) (apply null? args)]
       [(assq) (apply assq args)]
       [(eq?) (apply eq? args)]
@@ -519,18 +535,10 @@
 
 
 ; Other Utility Methods
-(define implst->list
-  (letrec ([loop (lambda (vars)
-    (if (pair? vars)
-        (cons (car vars) (loop (cdr vars)))
-        (list vars)))])
-  loop))
 
 
-(define list-set-at-index!
-  (lambda (ls ind val)
-    (if (= 0 ind) (set-car! ls val)
-      (list-set-at-index! (cdr ls) (- ind 1) val))))
+
+
 
 (define implst-map ; No error checking for now
   (lambda (f ls . more)
