@@ -145,6 +145,9 @@
 ;                   |
 ;-------------------+
 
+(define (empty-local-env)
+  '())
+
 (define (apply-local-env env info succeed fail)
   (let ([sym (car info)])
     (if (null? (cdr info))
@@ -371,7 +374,7 @@
     (cond
       [(and (pair? form) (eq? (car form) 'define-syntax)
         (eval-define-syntax (cdr form)))]
-      [else (eval-exp (parse-exp form (empty-templete)) (empty-env))])))
+      [else (eval-exp (parse-exp form (empty-templete)) (empty-local-env))])))
 
 
 ; these three functions define ADT reference, the return value of eval-exp
@@ -424,11 +427,11 @@
       [set!-cexp (varinfo val)
         (apply-local-env env varinfo
           (lambda(ref) (modify! ref (de-refer (eval-exp val env))))
-          (lambda() (define-in-env! env (eval-exp val env))))
-        (refer (void))]
+          (lambda() (define-in-env! global-env (eval-exp val env))))
+        (refer)]
       [define-cexp (var val)
         (define-in-env! global-env var (eval-exp val env))
-        (refer (void))]
+        (refer)]
       [app-cexp (rator rands)
         (let ([procref (eval-exp rator env)]
               [argsref (map (lambda(x) (eval-exp x env)) rands)])
@@ -571,17 +574,17 @@
 
 
 
-(define implst-map ; No error checking for now
-  (lambda (f ls . more)
-    (letrec ([map-one-implist
-            (lambda (ls)
-              (cond
-                [(and (not (pair? ls)) (not (null? ls))) (f ls)]
-                [(null? ls) '()]
-                [else (cons (f (car ls)) (map-one-implist (cdr ls)))]))])
-      (if (null? more)
-        (map-one-implist ls)
-        (apply map map-one-implist ls more)))))
+; (define implst-map ; No error checking for now
+;   (lambda (f ls . more)
+;     (letrec ([map-one-implist
+;             (lambda (ls)
+;               (cond
+;                 [(and (not (pair? ls)) (not (null? ls))) (f ls)]
+;                 [(null? ls) '()]
+;                 [else (cons (f (car ls)) (map-one-implist (cdr ls)))]))])
+;       (if (null? more)
+;         (map-one-implist ls)
+;         (apply map map-one-implist ls more)))))
 
 
 
