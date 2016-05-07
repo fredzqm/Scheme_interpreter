@@ -551,7 +551,7 @@
           (lambda() (define-in-env! env (eval-exp val env))))
         (refer (void))]
       [define-cexp (var val)
-        (define-in-env! env var (eval-exp val env))
+        (define-in-env! global-env var (eval-exp val env))
         (refer (void))]
       [app-cexp (rator rands)
         (let ([procref (eval-exp rator env)]
