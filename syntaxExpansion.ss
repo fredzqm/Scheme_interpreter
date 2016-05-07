@@ -108,16 +108,6 @@
                 [else (list 'className "Does not have method" method)]))))]))
 
 
-(define-class (stack)
-  ([s '()])
-  [(pop)
-      (let ([x (car s)])
-        (set! s (cdr s))
-        x)]
-  [(push e)
-      (set! s (cons e s))])
-
-
 (define-syntax with-values
   (syntax-rules ()
     [(_ p c)

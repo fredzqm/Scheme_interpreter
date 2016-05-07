@@ -23,4 +23,13 @@
       [(equal? (car ls) x) ls]
       [else (member x (cdr ls))])))
 
+(define-class (stack)
+  ([s '()])
+  [(pop)
+      (let ([x (car s)])
+        (set! s (cdr s))
+        x)]
+  [(push e)
+      (set! s (cons e s))])
+
 )))

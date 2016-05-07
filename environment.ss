@@ -18,9 +18,9 @@
   (apcont k (cons (list syms) env)))
 
 ; add a posible symbol to this level
-(define (add-pos-sym sym env k)
+(define (add-sym-templete sym env k)
   (if (not (symbol? sym))
-    (eopl:error 'add-pos-sym "sym should be a symbol ~s" sym))
+    (eopl:error 'add-sym-templete "sym should be a symbol ~s" sym))
   (apcont k 
     (if (or (member sym (caar env)) (member sym (cdar env)))
       env
@@ -37,9 +37,10 @@
 (define (search-in-templete sym env k)
   (let helper ([env env]
       [k (lambda (num ls)
-        (apcont k (if num
-          (cons* sym num ls)
-          (cons sym ls))))])
+        (apcont k 
+          (if num
+            (cons* sym num ls)
+            (cons sym ls))))])
     (if (null? env)
         (apcont k #f '())
         (index-in-ls sym (caar env)
@@ -52,14 +53,13 @@
                     (index-in-ls sym (cdar env)
                       (lambda (posible)
                         (if posible
-                          (apcont k 0 (cons (+ num 1) ls))
+                          (apcont k 0 (cons num ls))
                           (apcont k (+ num 1) ls))))
                     (index-in-ls sym (cdar env)
                       (lambda (posible)
                         (if posible
                           (apcont k 0 '())
                           (apcont k #f '())))))))))))))
-
 
 (define (index-in-ls sym ls k)
   (if (null? ls)
@@ -69,6 +69,86 @@
       (index-in-ls sym (cdr ls)
         (lambda (x)
           (apcont k (and x (+ 1 x))))))))
+
+;-------------------+
+;                   |
+; LOCAL ENVIRONMENT |
+;                   |
+;-------------------+
+; (define-datatype environment environment?
+;   (local-env-record)
+;   (global-env-record
+;    (syms (list-of (lambda(x) (or (not x)(symbol? x)))))
+;    (vals list?)
+;    (env environment?)))
+
+
+(define (apply-local-env info env succeed fail)
+  (let ([sym (car info)])
+    (if (null? (cdr info))
+      (apply-global-env sym succeed fail)
+      (let helper ([carls (cadr info)][cdrls (cddr info)][env env])
+        (if (= carls 0)
+          (if (integer? cdrls)
+            (apcont succeed (vector-ref (caar env) cdrls))
+            (search-in-table sym (cdar env)
+              succeed
+              (lambda ()
+                (if (null? cdrls)
+                  (apply-global-env sym succeed fail)
+                  (helper (car cdrls)(cdr cdrls) (cdr env))))
+          (helper (- carls 1) cdrls (cdr env)))))))))
+
+
+(define (extend-local-env vary? ref-map args env succeed fail)
+  (let helper ([ref-map ref-map][args args]
+              [k (lambda (curLevel)
+                    (apcont succeed 
+                      (cons 
+                        (cons 
+                          (list->vector curLevel)
+                          (empty-table))
+                        env)))])
+    (if (null? args)
+      (if (null? ref-map)
+        (apcont k '())
+        (apcont fail))
+      (if (null? ref-map)
+        (if vary?
+          (apcont k (list (refer (map de-refer vars))))
+          (apcont fail))
+        (helper (cdr ref-map) (cdr args)
+            (lambda (cdrVal)
+              (apcont k
+                (cons 
+                  (if (car ref-map) 
+                    (car args) 
+                    (refer (de-refer (car args))))
+                  cdrVal))))))))
+
+(define (define-local-env sym value env k)
+  (add-to-table (cdar env) sym value))
+
+;-------------------+
+;                   |
+; GLOBAL ENVIRONMENT|
+;                   |
+;-------------------+
+
+; a abstract data type of table or map
+(define (empty-table)
+  '())
+
+(define (search-in-table sym table succeed fail)
+  (let ([r (assoc table sym)])
+    (if r
+      (apcont succeed (cdr r))
+      (apcont fail))))
+
+(define (add-to-table! sym value table)
+  (let ([r (assoc table sym)])
+    (if (not r)
+      (cons (cons sym value) table))))
 
 ; (define extend-env
 ;   (lambda (syms vals env k)

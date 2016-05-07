@@ -38,7 +38,7 @@
   [app-cexp (rator cexpression?)
       (rands (list-of cexpression?))]
   [lambda-cexp
-      (vars (implist-of symbol?))
+      (vars (list-of symbol?))
       (ref-map (implist-of boolean?))
       (body (list-of cexpression?))]
   [if-cexp
@@ -66,7 +66,7 @@
   [special-proc
     (name symbol?)]
   [closure 
-    (vars (implist-of symbol?))
+    (variableLength boolean?)
     (ref-map (implist-of boolean?))
     (body (list-of cexpression?))
     (env environment?)])   
@@ -227,22 +227,49 @@
         [(quote)
           (lit-cexp
             (car body))]
+        ; [(lambda)
+        ;   (let* ([vars-list (car body)]
+        ;         [ref? (lambda (obj)
+        ;                 (cond
+        ;                   [(symbol? obj) #f]
+        ;                   [(and (list? obj) (eqv? 'ref (car obj)) (symbol? (cadr obj))) #t]
+        ;                   [else (eopl:error 'apply-core-syntax "Invalid argument declaration: ~s" vars-list)]))]
+        ;         [extr-var (lambda (obj)
+        ;                     (if (symbol? obj) obj (cadr obj)))])
+        ;     (let ([ref-map (implst-map ref? vars-list)]
+        ;           [boundVars (implst-map extr-var vars-list)])
+        ;       (let ([innerboundVars (cons (car body) boundVars)])
+        ;         (lambda-cexp
+        ;           boundVars
+        ;           ref-map
+        ;           (map (lambda(exp) (parse-exp exp innerboundVars)) (cdr body))))))]
         [(lambda)
-          (let* ([vars-list (car body)]
-                [ref? (lambda (obj)
-                        (cond
-                          [(symbol? obj) #f]
-                          [(and (list? obj) (eqv? 'ref (car obj)) (symbol? (cadr obj))) #t]
-                          [else (eopl:error 'apply-core-syntax "Invalid argument declaration: ~s" vars-list)]))]
-                [extr-var (lambda (obj)
-                            (if (symbol? obj) obj (cadr obj)))])
-            (let ([ref-map (implst-map ref? vars-list)]
-                  [boundVars (implst-map extr-var vars-list)])
-              (let ([innerboundVars (cons (car body) boundVars)])
-                (lambda-cexp
-                  boundVars
-                  ref-map
-                  (map (lambda(exp) (parse-exp exp innerboundVars)) (cdr body))))))]
+          (let helper ([varls (car body)]
+                      [k (lambda (vars ref-map lastVar)
+                          (lambda-cexp 
+                            vars 
+                            ref-map
+                            (let ([innerboundVars (cons vars boundVars)])
+                              (map (lambda(exp) (parse-exp exp innerboundVars)) (cdr body)))))])
+              (cond
+                [(null? varls) (apcont k '() '())]
+                [(symbol? varls) (apcont k (list varls) '())]
+                [(pair? varls)
+                  (helper (cdr varls)
+                    (lambda (cdrVars ref-map)
+                      (cond
+                        [(symbol? (car varls))
+                          (apcont k
+                            (cons (car varls) cdrVars)
+                            (cons #f cdrRef-map))]
+                        [(and (pair? (car varls)) (eq? 'ref (caar varls)) 
+                          (symbol? (cadar varls)) (null? (cddar varls)))
+                          (apcont k
+                            (cons (cadar varls) cdrVars)
+                            (cons #t cdrRef-map))]
+                        [else (eopl:error 'lambda-cexp "In correct format of lambda expression ~s" (cons 'lambda body))])
+                      ))])
+            )]
         [(if)
           (if-cexp
             (curlev-parse (car body))
@@ -378,7 +405,8 @@
           (eval-exp then-op env)
           (eval-exp else-op env))]
       [lambda-cexp (vars ref-map body)
-        (refer (closure vars ref-map body env))]
+        (refer (closure (not (= (length vars)(length ref-map)))
+                        ref-map body env))]
       [set!-cexp (var val)
         (let ([ref (eval-exp (var-cexp var) env)])
           (modify! ref (de-refer (eval-exp val env))))
@@ -422,22 +450,24 @@
               (let ([ret (apply-proc (car args) '())])
                   (apply-proc (cadr args) (map refer (de-refer-aslist ret))))]
             [(values) (apply refer (map de-refer args))])]
-        [closure (vars ref-map body env)
+        [closure (vary? ref-map body env)
           (let lambdaEval ([code body]
-            [env 
-              (if (list? vars)
-                (if (= (length vars)(length args))
-                  (extend-env vars (map (lambda(x)(refer (de-refer x))) args)  env)
-                  (eopl:error 'apply-proc "incorrect number of argument: closure ~a ~a" proc-v args))
-                (extend-env (implst->list vars)
-                  (map (lambda(x) (refer (de-refer x)))
-                    (let loop ([vars vars][args args]) ; match all parts of args to vars
-                      (if (pair? vars)
-                        (if (pair? args)
-                          (cons (car args) (loop (cdr vars) (cdr args)))
-                          (eopl:error 'apply-proc "not enough arguments: closure ~a ~a" proc-v args))
-                        (list (refer (map de-refer args))))))
-                  env))])
+            [env (extend-env vary? ref-map args env
+                    (lambda (x) x)
+                    (lambda () (eopl:error 'apply-proc "not enough arguments: closure ~a ~a" proc-v args)))])
+              ; (if (list? vars)
+              ;   (if (= (length vars)(length args))
+              ;     (extend-env vars (map (lambda(x)(refer (de-refer x))) args)  env)
+              ;     (eopl:error 'apply-proc "incorrect number of argument: closure ~a ~a" proc-v args))
+              ;   (extend-env (implst->list vars)
+              ;     (map (lambda(x) (refer (de-refer x)))
+              ;       (let loop ([vars vars][args args]) ; match all parts of args to vars
+              ;         (if (pair? vars)
+              ;           (if (pair? args)
+              ;             (cons (car args) (loop (cdr vars) (cdr args)))
+              ;             (eopl:error 'apply-proc "not enough arguments: closure ~a ~a" proc-v args))
+              ;           (list (refer (map de-refer args))))))
+              ;     env))
             (if (null? (cdr code))
               (eval-exp (car code) env)
               (begin (eval-exp (car code) env)
@@ -534,7 +564,7 @@
             prim-proc)])))
 
 
-; Other Utility Methods
+; ; Other Utility Methods
 
 
 
@@ -557,4 +587,4 @@
 (load "procdedures.ss")
 (load "syntaxExpansion.ss")
 (addSyntaxExpansion)
-(reset-global-env)
+; (reset-global-env)
