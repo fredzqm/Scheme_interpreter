@@ -86,14 +86,26 @@
   (cons (list syms) env))
 
 ; add a posible symbol to this level
-(define (add-sym-templete! env sym)
+(define (add-sym-templete env sym)
   (if (or (null? env) (member sym (caar env)) (member sym (cdar env)))
     env
     (cons
       (cons
-        (caar env) 
+        (caar env)
         (cons sym (cdar env)))
       (cdr env))))
+
+(define (merge-templets a b)
+  (if (null? a) a
+    (cons 
+      (cons
+        (caar a)
+        (let loop ([x (cdar a)][y (cdar b)])
+          (if (null? x) y
+            (if (member (car x) y)
+              (loop (cdr x) y)
+              (cons (car x) (loop (cdr x) y))))))
+      (cdr a))))
 
 ; return a var-cexp represented in lexical order.
 ; variable representation
@@ -247,9 +259,24 @@
 (define 3rd caddr)
 
 (define parse-exp
-  (lambda (datum templete)
-     (let ([curlev-parse (lambda (exp) (parse-exp exp templete))])
-        (cond
+  (lambda (datum templete k)
+    (let ([curlev-parse (lambda (exp) (parse-exp exp templete (lambda (temp result) result)))])
+      (if (pair? datum)
+        (let ([rator (car datum)][rands (cdr datum)])
+          (if (symbol? rator) (search-in-templete templete rator
+              (lambda (bounded)
+                (apcont k templete (app-cexp (var-cexp bounded) (map curlev-parse rands)))) ; occur bounded
+              (lambda (free) (search-table global-syntax-env rator ; occur free
+                (lambda (expanRules) (apply-syntax expanRules datum
+                  (lambda(x) (parse-exp x templete k))
+                  (lambda() (search-table core-syntax-env rator
+                    (lambda(coreRules) (apply-core-syntax coreRules datum templete k)) ; does proper syntax exapnsion
+                    (lambda() (eopl:error 'syntax-expansion "Invalid sytanx ~s" datum)))))) ; try syntax exapnsion but failed
+                (lambda() (search-table core-syntax-env rator
+                  (lambda(coreRules) (apply-core-syntax coreRules datum templete k))
+                  (lambda() (apcont k templete (app-cexp (var-cexp free) (map curlev-parse rands)))))))))
+            (apcont k templete (app-cexp (curlev-parse rator) (map curlev-parse rands)))))
+        (apcont k templete (cond
           [(symbol? datum) (search-in-templete templete datum
                               (lambda (bounded) (var-cexp bounded))
                               (lambda (free) (var-cexp free)))]
@@ -258,83 +285,79 @@
           [(boolean? datum) (lit-cexp datum)]
           [(string? datum) (lit-cexp datum)]
           [(null? datum) (lit-cexp datum)]
-          [(pair? datum)
-            (let ([rator (car datum)][rands (cdr datum)])
-              (if (symbol? rator)
-                (search-in-templete templete rator
-                  (lambda (bounded)
-                    (app-cexp (var-cexp bounded) (map curlev-parse rands))) ; occur bounded
-                  (lambda (free)
-                    (search-table global-syntax-env rator ; occur free
-                      (lambda (expanRules) (apply-syntax expanRules datum
-                        (lambda(x)(curlev-parse x))
-                        (lambda() (search-table core-syntax-env rator
-                          (lambda(coreRules) (apply-core-syntax coreRules datum templete)) ; does proper syntax exapnsion
-                          (lambda() (eopl:error 'syntax-expansion "Invalid sytanx ~s" datum)))))) ; try syntax exapnsion but failed
-                      (lambda() (search-table core-syntax-env rator
-                        (lambda(coreRules) (apply-core-syntax coreRules datum templete))
-                        (lambda() (app-cexp (var-cexp free) (map curlev-parse rands))))))))
-                (app-cexp (curlev-parse rator) (map curlev-parse rands))))]
-          [else (eopl:error 'parse-exp "bad expression: ~s" datum)]))))
+          [else (eopl:error 'parse-exp "bad expression: ~s" datum)]))))))
 
 
 (define apply-syntax
   (lambda (syntaxList exp succeed fail)
     (let ([try (ormap (lambda(x) (matchRule (car x) (cdr x) (cdr exp))) syntaxList)])
       (if try 
-        (succeed try)
-        (fail)))))
+        (apcont succeed try)
+        (apcont fail)))))
       
 (define apply-core-syntax
-  (lambda (coreSyntax exp templete)
-    (let ([sym (car exp)][body (cdr exp)]
-          [curlev-parse (lambda (exp) (parse-exp exp templete))])
+  (lambda (coreSyntax exp templete k)
+    (let ([sym (car exp)][body (cdr exp)])
       (or (ormap (lambda(x) (matchpattern x body)) coreSyntax)
         (eopl:error 'apply-core-syntax "Invalid core expression format ~s" exp))
       (case sym
         [(quote)
-          (lit-cexp
-            (car body))]
+          (apcont k templete (lit-cexp (car body)))]
         [(lambda)
           (let helper ([varls (car body)]
                       [k (lambda (vars ref-map)
-                          (lambda-cexp 
-                            vars 
-                            ref-map
-                            (let ([innertemplete (extend-templete vars templete)])
-                              (map (lambda(exp) (parse-exp exp innertemplete)) (cdr body)))))])
-              (cond
-                [(null? varls) (apcont k '() '())]
-                [(symbol? varls) (apcont k (list varls) '())]
-                [(pair? varls)
-                  (helper (cdr varls)
-                    (lambda (cdrVars cdrref-map)
-                      (cond
-                        [(symbol? (car varls))
-                          (apcont k
-                            (cons (car varls) cdrVars)
-                            (cons #f cdrRef-map))]
-                        [(and (pair? (car varls)) (eq? 'ref (caar varls)) 
-                          (symbol? (cadar varls)) (null? (cddar varls)))
-                          (apcont k
-                            (cons (cadar varls) cdrVars)
-                            (cons #t cdrRef-map))]
-                        [else (eopl:error 'lambda-cexp "In correct format of lambda expression ~s" (cons 'lambda body))])))]))]
+                          (apcont k 
+                            templete
+                            (lambda-cexp 
+                              vars 
+                              ref-map
+                              (let loop ([code (cdr body)][templete (extend-templete vars templete)])
+                                (if (null? code) '()
+                                  (parse-exp (car code) templete
+                                    (lambda (temp result)
+                                      (cons result (loop (cdr code) temp)))))))))])
+            (cond
+              [(null? varls) (apcont k '() '())]
+              [(symbol? varls) (apcont k (list varls) '())]
+              [(pair? varls)
+                (helper (cdr varls)
+                  (lambda (cdrVars cdrref-map)
+                    (cond
+                      [(symbol? (car varls))
+                        (apcont k
+                          (cons (car varls) cdrVars)
+                          (cons #f cdrRef-map))]
+                      [(and (pair? (car varls)) (eq? 'ref (caar varls)) 
+                        (symbol? (cadar varls)) (null? (cddar varls)))
+                        (apcont k
+                          (cons (cadar varls) cdrVars)
+                          (cons #t cdrRef-map))]
+                      [else (eopl:error 'lambda-cexp "In correct format of lambda expression ~s" (cons 'lambda body))])))]))]
         [(if)
-          (if-cexp
-            (curlev-parse (car body))
-            (curlev-parse (cadr body))
-            (curlev-parse (caddr body)))]
+          (parse-exp (car body) templete
+            (lambda (temp-test result-test)
+              (parse-exp (cadr body) temp-test
+                (lambda (temp-then result-then)
+                  (parse-exp (caddr body) temp-test
+                    (lambda (temp-else result-else)
+                      (apcont k
+                        (merge-templets temp-then temp-else)
+                        (if-cexp result-test result-then result-else))))))))]
         [(set!)
-          (set!-cexp
-            (search-in-templete templete (car body)
-              (lambda (x) x) (lambda (x) x))
-            (curlev-parse (cadr body)))]
+          (apcont k 
+            templete 
+            (set!-cexp
+              (search-in-templete templete (car body)
+                (lambda (x) x) (lambda (x) x))
+              (parse-exp (cadr body) templete
+                (lambda (temp result) result))))]
         [(define)
-          (add-sym-templete! templete (car body))
-          (define-cexp
-            (car body)
-            (curlev-parse (cadr body)))]
+          (apcont k
+            (add-sym-templete templete (car body))
+            (define-cexp
+              (car body)
+              (parse-exp (cadr body) templete
+                (lambda (temp result) result))))]
         [else (eopl:error 'apply-core-syntax "not implemented core expression ~s" exp)]))))
 
 
@@ -404,7 +427,11 @@
     (cond
       [(and (pair? form) (eq? (car form) 'define-syntax)
         (eval-define-syntax (cdr form)))]
-      [else (eval-exp (parse-exp form (empty-templete)) (empty-local-env))])))
+      [else 
+        (eval-exp 
+          (parse-exp form 
+            (empty-templete) (lambda (temp result) result)) 
+          (empty-local-env))])))
 
 ; these three functions define ADT reference, the return value of eval-exp
 (define (refer . a) 
