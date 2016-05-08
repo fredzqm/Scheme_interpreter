@@ -413,6 +413,16 @@
           (eopl:pretty-print (car answers))
           (displayLoop (cdr answers)))))))
 
+; (define (toString v)
+;   (if (proc-val? v)
+;     (cases proc-val v
+;       [prim-proc (name)
+;         (list 'prim-proc name)]
+;       [special-proc (name)
+;         (list 'prim-proc name)]
+;       [closure (variableLength vars ref-map body env)
+;         (list 'lambda vars (unparse-exp body))])))
+
 ; the separate interpreter entry
 (define eval-one-exp
   (lambda (x) 
@@ -433,6 +443,12 @@
           (parse-exp form 
             (empty-templete) (lambda (temp result) result)) 
           (empty-local-env))])))
+
+; to easy typing eval-one-exp
+(define-syntax i
+  (syntax-rules ()
+    [(_ x)
+      (eval-one-exp (quote x))]))
 
 ; these three functions define ADT reference, the return value of eval-exp
 (define (refer . a) 
