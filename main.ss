@@ -60,7 +60,8 @@
 ; kind of procedure, but more kinds will be added later.
 (define-datatype proc-val proc-val?
   [prim-proc
-    (name symbol?)]
+    (name symbol?)
+    (proc procedure?)]
   [special-proc
     (name symbol?)]
   [closure 
@@ -369,7 +370,7 @@
 ;-----------------------+
 
 (define global-syntax-env
-  (create-table '() '()))
+  (empty-table))
 
 ; To be added with define-syntax
 (define core-syntax-env 
@@ -522,7 +523,7 @@
   (lambda (proc-r args) ; args should not have been de-referred
     (let ([proc-v (de-refer proc-r)])
       (cases proc-val proc-v
-        [prim-proc (op) (refer (apply-prim-proc op (map de-refer args)))]
+        [prim-proc (op proc) (refer (apply proc (map de-refer args)))]
         [special-proc (op)
           (case op
             [(apply)
@@ -556,88 +557,20 @@
 (define *spec-proc-names* '(apply values call-with-values))
 (define *prim-proc-names* '(+ - * / add1 sub1 zero? not = < > <= >= cons list null? assq eq?
                             eqv? equal? atom? car caar caaar caadr cadar cdaar caddr cdadr cddar cdddr cadr cdar
-                            cddr cdr length list->vector list? pair? append list-tail procedure?
+                            cddr cdr length list->vector list? pair? append list-tail
                             vector->list vector make-vector vector-ref vector? number? symbol? set-car! set-cdr!
                             vector-set! display newline void quotient))
 
 (define (reset-global-env)
   (set! global-env
     (create-table
-       (append *spec-proc-names* *prim-proc-names*)
+       (append  '(procedure?) *spec-proc-names* *prim-proc-names*)
        (append 
+          (list (refer (prim-proc 'procedure? proc-val?)))
           (map (lambda(x) (refer (special-proc x))) *spec-proc-names*)
-          (map (lambda(x) (refer (prim-proc x))) *prim-proc-names*))))
+          (map (lambda(x) (refer (prim-proc x (eval x)))) *prim-proc-names*))))
   (addPredefinedProcedures))
 
-; Usually an interpreter must define each 
-; built-in procedure individually.  We are "cheating" a little bit.
-; arguments:
-;   prim-proc: the primitive procedure, de-referred
-;   args: the list of arguments, de-referred
-; returns:
-;   single value, not referred
-(define apply-prim-proc
-  (lambda (prim-proc args)
-    (case prim-proc
-      [(+) (apply + args)]
-      [(-) (apply - args)]
-      [(*) (apply * args)]
-      [(/) (apply / args)]
-      [(add1) (+ (1st args) 1)] ; Error-handling for more than 1 args?
-      [(sub1) (- (1st args) 1)]
-      [(zero?) (zero? (1st args))]
-      [(not) (not (1st args))]
-      [(=) (= (1st args) (2nd args))]
-      [(<) (apply < args)]
-      [(>) (apply > args)]
-      [(<=) (apply <= args)]
-      [(>=) (apply >= args)]
-      [(cons) (cons (1st args) (2nd args))]
-      [(list) args]
-      [(null?) (apply null? args)]
-      [(assq) (apply assq args)]
-      [(eq?) (apply eq? args)]
-      [(eqv?) (apply eqv? args)]
-      [(equal?) (apply equal? args)]
-      [(atom?) (apply atom? args)]
-      [(car) (apply car args)]
-      [(caar) (apply caar args)]
-      [(caaar) (apply caaar args)]
-      [(caadr) (apply caadr args)]
-      [(cadar) (apply cadar args)]
-      [(cdaar) (apply cdaar args)]
-      [(caddr) (apply caddr args)]
-      [(cdadr) (apply cdadr args)]
-      [(cddar) (apply cddar args)]
-      [(cdddr) (apply cdddr args)]
-      [(cadr) (apply cadr args)]
-      [(cdar) (apply cdar args)]
-      [(cddr) (apply cddr args)]
-      [(cdr) (apply cdr args)]
-      [(length) (apply length args)]
-      [(list->vector) (apply list->vector args)]
-      [(list?) (apply list? args)]
-      [(pair?) (apply pair? args)]
-      [(append) (apply append args)]
-      [(list-tail) (apply list-tail args)]
-      [(procedure?) (apply proc-val? args)]
-      [(vector->list) (apply vector->list args)]
-      [(vector) (apply vector args)]
-      [(make-vector) (apply make-vector args)]
-      [(vector-ref) (apply vector-ref args)]
-      [(vector?) (apply vector? args)]
-      [(number?) (apply number? args)]
-      [(symbol?) (apply symbol? args)]
-      [(set-car!) (apply set-car! args)]
-      [(set-cdr!) (apply set-cdr! args)]
-      [(vector-set!) (apply vector-set! args)]
-      [(display) (apply display args)]
-      [(newline) (apply newline args)]
-      [(void) (apply void args)]
-      [(quotient) (apply quotient args)]
-      [else (error 'apply-prim-proc 
-            "Bad primitive procedure name: ~s" 
-            prim-proc)])))
 
 (addSyntaxExpansion)
 (reset-global-env)
