@@ -23,7 +23,6 @@
 (load "chez-init.ss")
 (load "syntax.ss")
 (load "procedure_init.ss")
-(load "environment.ss")
 (load "syntax_expansion_init.ss")
 
 ;-------------------+
@@ -116,10 +115,10 @@
 ; uncertain bounded var: '(name d1 d2 d3 ... depth . index)
 (define (search-in-templete env sym bounded free)
   (let helper ([env env]
-      [k (lambda (num ls)
-        (if num
-          (apcont bounded (cons* sym num ls))
-          (apcont free (cons sym ls))))])
+              [k (lambda (num ls)
+                (if num
+                  (apcont bounded (cons* sym num ls))
+                  (apcont free (cons sym ls))))])
     (if (null? env)
         (apcont k #f '())
         (index-in-ls sym (caar env)

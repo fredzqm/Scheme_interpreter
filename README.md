@@ -63,9 +63,9 @@ free var: '(name)
 bounded var: '(name depth . index)
 	Go to depth up lexical scope's index-th element directly
 uncertain free var: '(name d1 d2 d3 ...)
-	Check d1 d2 d3 level, get the closet one, if exists. If none of them contain this variable, go to global environment
+	Check d1, d1+1+d2, d1+1+d2+1+d3 … level, get the closet one, if exists. If none of them contain this variable, go to global environment
 uncertain bounded var: '(name d1 d2 d3 ... depth . index)
-	Check d1 d2 d3 level, get the closet one, if exists. If none of them contain this variable, go to the specified index.
+	Check d1, d1+1+d2, d1+1+d2+1+d3 … level, get the closet one, if exists. If none of them contain this variable, go to the specified index.
 
 This representation minimizes the levels to check for. If a is bounded at level 1, and posibly be redefined at level 10, and used at level 20. This representation help the interpreter to only look for the value in two levels.
 
