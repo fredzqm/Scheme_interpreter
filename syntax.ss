@@ -1,3 +1,4 @@
+
 (define-datatype syntax-pattern syntax-pattern?
   [listpt (carpt syntax-pattern?) (cdrpt syntax-pattern?)]
   [multpt (eachpt syntax-pattern?) (endpt syntax-pattern?)]
@@ -200,11 +201,11 @@
 
 
 
-;-------------------+
-;                   |
-; expansion Runtime |
-;                   |
-;-------------------+
+;-----------------------+
+;                       |
+;   SYNTAX EXPANSION    |
+;                       |
+;-----------------------+
 
 
 (define matchRule

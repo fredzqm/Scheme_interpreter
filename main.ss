@@ -362,35 +362,37 @@
 
 ;-----------------------+
 ;                       |
-;   SYNTAX EXPANSION    |
+;       REFERENCE       |
 ;                       |
 ;-----------------------+
 
-(define global-syntax-env
-  (empty-table))
+; these three functions define ADT reference, the return value of eval-exp
+(define (refer . a) 
+  (cond
+    [(null? a) '()]
+    [(null? (cdr a)) (box (car a))]
+    [else a]))
 
-; To be added with define-syntax
-(define core-syntax-env 
-  (create-table
-    '(quote lambda if set! define)
-    (list 
-      (list ; quote
-        (listpt (exprpt 'e) (emptpt)))
-      (list ; lambda
-        (listpt (multpt (exprpt 'v) (sympt 'l))
-          (multpt (exprpt 'e) (emptpt)))
-        (listpt (multpt (exprpt 'v) (emptpt))
-          (multpt (exprpt 'e) (emptpt))))
-      (list ; if 
-        (listpt (exprpt 'p)
-          (listpt (exprpt 't)
-            (listpt (exprpt 'e) (emptpt)))))
-      (list ; set!
-        (listpt (sympt 'v)
-          (listpt (exprpt 'e) (emptpt))))
-      (list ; define
-        (listpt (sympt 'v)
-          (listpt (exprpt 'e) (emptpt)))))))
+(define (de-refer ref) 
+  (cond
+    [(box? ref) (unbox ref)]
+    [(null? ref) (void)]
+    [(and (list? ref) (< 1 (length ref)))
+      (eopl:error 'de-refer "Return multiple values ~s to single value environment" ref)]
+    [else (eopl:error 'de-refer "Try to de-reference Invalid reference ~s" ref)]))
+
+(define (de-refer-aslist ref)
+  (cond
+    [(null? ref) '()]
+    [(box? ref) (list (unbox ref))]
+    [(and (list? ref) (< 1 (length ref)))
+      ref]
+    [else (eopl:error 'de-refer-aslist "Try to de-reference Invalid reference ~s" ref)]))
+
+(define (modify! ref val) 
+  (if (not (box? ref))
+    (eopl:error 'modify! "Can only modify a reference with one value: ~s," ref)
+    (set-box! ref val)))
 
 
 
@@ -444,36 +446,12 @@
           (lambda (x) x))])))
 
 
-; these three functions define ADT reference, the return value of eval-exp
-(define (refer . a) 
-  (cond
-    [(null? a) '()]
-    [(null? (cdr a)) (box (car a))]
-    [else a]))
+;-----------------------+
+;                       |
+;      EVALUATION       |
+;                       |
+;-----------------------+
 
-(define (de-refer ref) 
-  (cond
-    [(box? ref) (unbox ref)]
-    [(null? ref) (void)]
-    [(and (list? ref) (< 1 (length ref)))
-      (eopl:error 'de-refer "Return multiple values ~s to single value environment" ref)]
-    [else (eopl:error 'de-refer "Try to de-reference Invalid reference ~s" ref)]))
-
-(define (de-refer-aslist ref)
-  (cond
-    [(null? ref) '()]
-    [(box? ref) (list (unbox ref))]
-    [(and (list? ref) (< 1 (length ref)))
-      ref]
-    [else (eopl:error 'de-refer-aslist "Try to de-reference Invalid reference ~s" ref)]))
-
-(define (modify! ref val) 
-  (if (not (box? ref))
-    (eopl:error 'modify! "Can only modify a reference with one value: ~s," ref)
-    (set-box! ref val)))
-
-
-(define identity (lambda(x) x))
 
 (define apcont (lambda (k . x)
     (apply k x)))
@@ -482,8 +460,7 @@
 ; eval-exp should return a list of result.
 ; this well help the implementation of multiple return value
 ; It also makes reference easier
-(define eval-exp
-  (lambda (exp env k)
+(define (eval-exp exp env k)
     (cases cexpression exp
       [lit-cexp (datum) (apcont k (refer datum))]
       [var-cexp (varinfo)
@@ -516,18 +493,17 @@
         (eval-rands (cons rator rands) env
           (lambda (argsref)
             (apply-proc (car argsref) (cdr argsref) k)))]
-      [else (eopl:error 'eval-exp "Bad abstract syntax: ~a" exp)])))
+      [else (eopl:error 'eval-exp "Bad abstract syntax: ~a" exp)]))
 
 
-(define eval-rands
-  (lambda (rands env k)
+(define (eval-rands rands env k)
     (if (null? rands)
       (apcont k '())
       (eval-exp (car rands) env
         (lambda (carRef)
           (eval-rands (cdr rands) env
             (lambda (cdrRef)
-              (apcont k (cons carRef cdrRef)))))))))
+              (apcont k (cons carRef cdrRef))))))))
 
 ; evaluate the list of operands, putting results into a list
 ;  Apply a procedure to its arguments.
@@ -536,8 +512,7 @@
 ; arguments:
 ;   proc-r: reference of a procedure, not de-referred
 ;   args: list of arguments, the list is not referred, but each arg is referred
-(define apply-proc
-  (lambda (proc-r args k) ; args should not have been de-referred
+(define (apply-proc proc-r args k) ; args should not have been de-referred
     (let ([proc-v (de-refer proc-r)])
       (cases proc-val proc-v
         [prim-proc (op proc) (apcont k (refer (apply proc (map de-refer args))))]
@@ -565,14 +540,50 @@
           (extend-local-env vary? ref-map args env
             (lambda (env) (eval-body body env k))
             (lambda () (eopl:error 'apply-proc "not enough arguments: closure ~a ~a" proc-v args)))]
-        [else (eopl:error 'apply-proc "Attempt to apply bad procedure: ~s" proc-v)]))))
+        [else (eopl:error 'apply-proc "Attempt to apply bad procedure: ~s" proc-v)])))
 
-(define eval-body
-  (lambda (code env k)
+
+(define (eval-body code env k)
     (eval-exp (car code) env
       (if (null? (cdr code)) k
         (lambda (carVal)
-          (eval-body (cdr code) env k))))))
+          (eval-body (cdr code) env k)))))
+
+
+
+;-----------------------+
+;                       |
+;  GLOBAL ENVIRONMENT   |
+;                       |
+;-----------------------+
+
+(define global-syntax-env
+  (empty-table))
+
+; To be added with define-syntax
+(define core-syntax-env 
+  (create-table
+    '(quote lambda if set! define)
+    (list 
+      (list ; quote
+        (listpt (exprpt 'e) (emptpt)))
+      (list ; lambda
+        (listpt (multpt (exprpt 'v) (sympt 'l))
+          (multpt (exprpt 'e) (emptpt)))
+        (listpt (multpt (exprpt 'v) (emptpt))
+          (multpt (exprpt 'e) (emptpt))))
+      (list ; if 
+        (listpt (exprpt 'p)
+          (listpt (exprpt 't)
+            (listpt (exprpt 'e) (emptpt)))))
+      (list ; set!
+        (listpt (sympt 'v)
+          (listpt (exprpt 'e) (emptpt))))
+      (list ; define
+        (listpt (sympt 'v)
+          (listpt (exprpt 'e) (emptpt)))))))
+
+
 
 (define *spec-proc-names* '(apply values call-with-values))
 (define *prim-proc-names* '(+ - * / add1 sub1 zero? not = < > <= >= cons list null? assq eq?
@@ -580,6 +591,7 @@
                             cddr cdr length list->vector list? pair? append list-tail
                             vector->list vector make-vector vector-ref vector? number? symbol? set-car! set-cdr!
                             vector-set! display newline void quotient))
+
 
 (define (reset-global-env)
   (set! global-env
@@ -592,6 +604,17 @@
   (addPredefinedProcedures))
 
 
+
+
+
+
+;-----------------------+
+;                       |
+;       INTIALIZE       |
+;                       |
+;-----------------------+
+
+
 (addSyntaxExpansion)
 (reset-global-env)
 
@@ -602,6 +625,7 @@
     [(_ x)
       (eval-one-exp (quote x))]))
 
+; to ease tracing
 (define t
   (lambda ()
     (trace eval-exp eval-body apply-proc eval-rands)))
