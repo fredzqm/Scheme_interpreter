@@ -3,9 +3,7 @@
 ;:  Single-file version of the interpreter.
 ;; Easier to submit to server, probably harder to use in the development process
 
-(define apcont
-  (lambda (k . x)
-    (apply k x)))
+
 
 (define (implist-of pred?)
   (lambda(implst)
@@ -117,37 +115,37 @@
   (let helper ([env env]
               [k (lambda (num ls)
                 (if num
-                  (apcont bounded (cons* sym num ls))
-                  (apcont free (cons sym ls))))])
+                  (bounded (cons* sym num ls))
+                  (free (cons sym ls))))])
     (if (null? env)
-        (apcont k #f '())
+        (k #f '())
         (index-in-ls sym (caar env)
           (lambda(lexiIndex)
             (if lexiIndex
-              (apcont k 0 lexiIndex)
+              (k 0 lexiIndex)
               (helper (cdr env)
                 (lambda (num ls)
                   (if num
                     (index-in-ls sym (cdar env)
                       (lambda (posible)
                         (if posible
-                          (apcont k 0 (cons num ls))
-                          (apcont k (+ num 1) ls))))
+                          (k 0 (cons num ls))
+                          (k (+ num 1) ls))))
                     (index-in-ls sym (cdar env)
                       (lambda (posible)
                         (if posible
-                          (apcont k 0 '())
-                          (apcont k #f '())))))))))))))
+                          (k 0 '())
+                          (k #f '())))))))))))))
 
 ; a helper method for templete
 (define (index-in-ls sym ls k)
   (if (null? ls)
-    (apcont k #f)
+    (k #f)
     (if (eq? sym (car ls))
-      (apcont k 0)
+      (k 0)
       (index-in-ls sym (cdr ls)
         (lambda (x)
-          (apcont k (and x (+ 1 x))))))))
+          (k (and x (+ 1 x))))))))
 
 
 ;-------------------+
@@ -166,7 +164,7 @@
       (let helper ([carls (cadr info)][cdrls (cddr info)][env env])
         (if (= carls 0)
           (if (integer? cdrls)
-            (apcont succeed (vector-ref (caar env) cdrls))
+            (succeed (vector-ref (caar env) cdrls))
             (search-table (cdar env) sym
               succeed
               (lambda ()
@@ -179,7 +177,7 @@
 (define (extend-local-env vary? ref-map args env succeed fail)
   (let helper ([ref-map ref-map][args args]
               [k (lambda (curLevel)
-                    (apcont succeed 
+                    (succeed 
                       (cons 
                         (cons 
                           (list->vector curLevel)
@@ -187,15 +185,15 @@
                         env)))])
     (if (null? ref-map)
       (if vary?
-        (apcont k (list (refer (map de-refer args))))
+        (k (list (refer (map de-refer args))))
         (if (null? args)
-          (apcont k '())
-          (apcont fail)))
+          (k '())
+          (fail)))
       (if (null? args)
-        (apcont fail)
+        (fail)
         (helper (cdr ref-map) (cdr args)
             (lambda (cdrVal)
-              (apcont k
+              (k
                 (cons 
                   (if (car ref-map) 
                     (car args) 
@@ -235,8 +233,8 @@
 (define search-table
   (lambda (env sym succeed fail) ; succeed and fail are procedures applied if the var is or isn't found, respectively.
     (if (hashtable-contains? env sym)
-      (apcont succeed (hashtable-ref env sym #f))
-      (apcont fail))))
+      (succeed (hashtable-ref env sym #f))
+      (fail))))
 
 
 (define update-table!
@@ -265,7 +263,7 @@
         (let ([rator (car datum)][rands (cdr datum)])
           (if (symbol? rator) (search-in-templete templete rator
               (lambda (bounded)
-                (apcont k templete (app-cexp (var-cexp bounded) (map curlev-parse rands)))) ; occur bounded
+                (k templete (app-cexp (var-cexp bounded) (map curlev-parse rands)))) ; occur bounded
               (lambda (free) (search-table global-syntax-env rator ; occur free
                 (lambda (expanRules) (apply-syntax expanRules datum
                   (lambda(x) (parse-exp x templete k))
@@ -274,9 +272,9 @@
                     (lambda() (eopl:error 'syntax-expansion "Invalid sytanx ~s" datum)))))) ; try syntax exapnsion but failed
                 (lambda() (search-table core-syntax-env rator
                   (lambda(coreRules) (apply-core-syntax coreRules datum templete k))
-                  (lambda() (apcont k templete (app-cexp (var-cexp free) (map curlev-parse rands)))))))))
-            (apcont k templete (app-cexp (curlev-parse rator) (map curlev-parse rands)))))
-        (apcont k templete (cond
+                  (lambda() (k templete (app-cexp (var-cexp free) (map curlev-parse rands)))))))))
+            (k templete (app-cexp (curlev-parse rator) (map curlev-parse rands)))))
+        (k templete (cond
           [(symbol? datum) (search-in-templete templete datum
                               (lambda (bounded) (var-cexp bounded))
                               (lambda (free) (var-cexp free)))]
@@ -292,8 +290,8 @@
   (lambda (syntaxList exp succeed fail)
     (let ([try (ormap (lambda(x) (matchRule (car x) (cdr x) (cdr exp))) syntaxList)])
       (if try 
-        (apcont succeed try)
-        (apcont fail)))))
+        (succeed try)
+        (fail)))))
       
 
 (define apply-core-syntax
@@ -303,11 +301,11 @@
         (eopl:error 'apply-core-syntax "Invalid core expression format ~s" exp))
       (case sym
         [(quote)
-          (apcont k templete (lit-cexp (car body)))]
+          (k templete (lit-cexp (car body)))]
         [(lambda)
           (let helper ([varls (car body)]
                       [k (lambda (vars ref-map)
-                          (apcont k 
+                          (k 
                             templete
                             (lambda-cexp 
                               vars 
@@ -318,19 +316,19 @@
                                     (lambda (temp result)
                                       (cons result (loop (cdr code) temp)))))))))])
             (cond
-              [(null? varls) (apcont k '() '())]
-              [(symbol? varls) (apcont k (list varls) '())]
+              [(null? varls) (k '() '())]
+              [(symbol? varls) (k (list varls) '())]
               [(pair? varls)
                 (helper (cdr varls)
                   (lambda (cdrVars cdrref-map)
                     (cond
                       [(symbol? (car varls))
-                        (apcont k
+                        (k
                           (cons (car varls) cdrVars)
                           (cons #f cdrRef-map))]
                       [(and (pair? (car varls)) (eq? 'ref (caar varls)) 
                         (symbol? (cadar varls)) (null? (cddar varls)))
-                        (apcont k
+                        (k
                           (cons (cadar varls) cdrVars)
                           (cons #t cdrRef-map))]
                       [else (eopl:error 'lambda-cexp "In correct format of lambda expression ~s" (cons 'lambda body))])))]))]
@@ -341,11 +339,11 @@
                 (lambda (temp-then result-then)
                   (parse-exp (caddr body) temp-test
                     (lambda (temp-else result-else)
-                      (apcont k
+                      (k
                         (merge-templets temp-then temp-else)
                         (if-cexp result-test result-then result-else))))))))]
         [(set!)
-          (apcont k 
+          (k 
             templete 
             (set!-cexp
               (search-in-templete templete (car body)
@@ -353,7 +351,7 @@
               (parse-exp (cadr body) templete
                 (lambda (temp result) result))))]
         [(define)
-          (apcont k
+          (k
             (add-sym-templete templete (car body))
             (define-cexp
               (car body)
@@ -445,11 +443,6 @@
           (empty-local-env)
           identity)])))
 
-; to easy typing eval-one-exp
-(define-syntax i
-  (syntax-rules ()
-    [(_ x)
-      (eval-one-exp (quote x))]))
 
 ; these three functions define ADT reference, the return value of eval-exp
 (define (refer . a) 
@@ -479,6 +472,9 @@
     (eopl:error 'modify! "Can only modify a reference with one value: ~s," ref)
     (set-box! ref val)))
 
+(define apcont (lambda (k . x)
+    (apply k x)))
+
 (define identity (lambda(x) x))
 
 ; eval-exp is the main component of the interpreter
@@ -488,31 +484,61 @@
 (define eval-exp
   (lambda (exp env k)
     (cases cexpression exp
-      [lit-cexp (datum) (refer datum)]
+      [lit-cexp (datum) (apcont k (refer datum))]
       [var-cexp (varinfo)
 				(apply-local-env env varinfo ; look up its value.
-    	   (lambda (x) x) ; procedure to call if id is in the environment 
+    	   (lambda (x) (apcont k x)) ; procedure to call if id is in the environment 
          (lambda () (eopl:error 'apply-local-env "variable not found in environment: ~s" varinfo)))]
       [if-cexp (test then-op else-op)
-        (if (de-refer (eval-exp test env identity))
-          (eval-exp then-op env identity)
-          (eval-exp else-op env identity))]
+        ; (if (de-refer (eval-exp test env identity))
+        ;   (eval-exp then-op env identity)
+        ;   (eval-exp else-op env identity))
+        (eval-exp test env
+          (lambda (testResult)
+            (if (de-refer testResult)
+              (eval-exp then-op env k)
+              (eval-exp else-op env k))))]
       [lambda-cexp (vars ref-map body)
-        (refer (closure (not (= (length vars)(length ref-map)))
-                        ref-map body env))]
+        (apcont k (refer 
+          (closure (not (= (length vars)(length ref-map)))
+            ref-map body env)))]
       [set!-cexp (varinfo val)
-        (apply-local-env env varinfo
-          (lambda(ref) (modify! ref (de-refer (eval-exp val env identity))))
-          (lambda() (update-table! global-env (eval-exp val env identity))))
-        (refer)]
+        ; (apply-local-env env varinfo
+        ;   (lambda(ref) (modify! ref (de-refer (eval-exp val env identity))))
+        ;   (lambda() (update-table! global-env (eval-exp val env identity))))
+        ; (refer)
+        (eval-exp val env
+          (lambda (v)
+            (apply-local-env env varinfo
+              (lambda (ref) (modify! ref (de-refer v)))
+              (lambda () (update-table! global-env v)))
+            (apcont k (refer))))]
       [define-cexp (var val)
-        (define-in-local-env! env var (eval-exp val env identity))
-        (refer)]
+        ; (define-in-local-env! env var (eval-exp val env identity))
+        ; (refer)
+        (eval-exp val env
+          (lambda (v)
+            (define-in-local-env! env var v)
+            (apcont k (refer))))]
       [app-cexp (rator rands)
-        (let ([procref (eval-exp rator env identity)]
-              [argsref (map (lambda(x) (eval-exp x env identity)) rands)])
-          (apply-proc procref argsref identity))]
+        ; (let ([procref (eval-exp rator env identity)]
+        ;       [argsref (map (lambda(x) (eval-exp x env identity)) rands)])
+        ;   (apply-proc procref argsref identity))
+        (eval-rands (cons rator rands) env
+          (lambda (argsref)
+            (apply-proc (car argsref) (cdr argsref) k)))]
       [else (eopl:error 'eval-exp "Bad abstract syntax: ~a" exp)])))
+
+
+(define eval-rands
+  (lambda (rands env k)
+    (if (null? rands)
+      (apcont k '())
+      (eval-exp (car rands) env
+        (lambda (carRef)
+          (eval-rands (cdr rands) env
+            (lambda (cdrRef)
+              (apcont k (cons carRef cdrRef)))))))))
 
 ; evaluate the list of operands, putting results into a list
 ;  Apply a procedure to its arguments.
@@ -525,7 +551,7 @@
   (lambda (proc-r args k) ; args should not have been de-referred
     (let ([proc-v (de-refer proc-r)])
       (cases proc-val proc-v
-        [prim-proc (op proc) (refer (apply proc (map de-refer args)))]
+        [prim-proc (op proc) (apcont k (refer (apply proc (map de-refer args))))]
         [special-proc (op)
           (case op
             [(apply)
@@ -538,24 +564,36 @@
                       (map refer (de-refer nextarg))
                       (eopl:error 'apply "The last argument of apply should be a proper list of arguments ~s" nextarg))
                     (cons nextarg (loop (car leftarg) (cdr leftarg)))))
-                identity)]
+                k)]
             [(call-with-values)
               (if (not (= 2 (length args)))
                 (eopl:error 'call-with-values "call-with-values takes two parameters: a producer and a consumer: ~s" args))
-              (let ([ret (apply-proc (car args) '() identity)])
-                  (apply-proc (cadr args) (map refer (de-refer-aslist ret)) identity))]
-            [(values) (apply refer (map de-refer args))])]
+              ; (let ([ret (apply-proc (car args) '() identity)])
+              ;     (apply-proc (cadr args) (map refer (de-refer-aslist ret)) identity))
+              (apply-proc (car args) '()
+                (lambda (mult-vals)
+                  (apply-proc (cadr args) (map refer (de-refer-aslist mult-vals)) k)))]
+            [(values) (apcont k (apply refer (map de-refer args)))])]
         [closure (vary? ref-map body env)
-          (let lambdaEval ([code body]
-            [env (extend-local-env vary? ref-map args env
-                    (lambda (x) x)
-                    (lambda () (eopl:error 'apply-proc "not enough arguments: closure ~a ~a" proc-v args)))])
-            (if (null? (cdr code))
-              (eval-exp (car code) env identity)
-              (begin (eval-exp (car code) env identity)
-                (lambdaEval (cdr code) env))))]
+          ; (let lambdaEval ([code body]
+          ;   [env (extend-local-env vary? ref-map args env
+          ;           (lambda (x) x)
+          ;           (lambda () (eopl:error 'apply-proc "not enough arguments: closure ~a ~a" proc-v args)))])
+          ;   (if (null? (cdr code))
+          ;     (eval-exp (car code) env identity)
+          ;     (begin (eval-exp (car code) env identity)
+          ;       (lambdaEval (cdr code) env))))
+          (extend-local-env vary? ref-map args env
+            (lambda (env) (eval-body body env k))
+            (lambda () (eopl:error 'apply-proc "not enough arguments: closure ~a ~a" proc-v args)))]
         [else (eopl:error 'apply-proc "Attempt to apply bad procedure: ~s" proc-v)]))))
 
+(define eval-body
+  (lambda (code env k)
+    (eval-exp (car code) env
+      (if (null? (cdr code)) k
+        (lambda (carVal)
+          (eval-body (cdr code) env k))))))
 
 (define *spec-proc-names* '(apply values call-with-values))
 (define *prim-proc-names* '(+ - * / add1 sub1 zero? not = < > <= >= cons list null? assq eq?
@@ -577,3 +615,14 @@
 
 (addSyntaxExpansion)
 (reset-global-env)
+
+
+; to easy typing eval-one-exp
+(define-syntax i
+  (syntax-rules ()
+    [(_ x)
+      (eval-one-exp (quote x))]))
+
+(define t
+  (lambda ()
+    (trace eval-exp eval-body apply-proc eval-rands)))
