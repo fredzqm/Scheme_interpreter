@@ -441,7 +441,7 @@
           (parse-exp form 
             (empty-templete) (lambda (temp result) result)) 
           (empty-local-env)
-          identity)])))
+          (lambda (x) x))])))
 
 
 ; these three functions define ADT reference, the return value of eval-exp
@@ -472,10 +472,11 @@
     (eopl:error 'modify! "Can only modify a reference with one value: ~s," ref)
     (set-box! ref val)))
 
-(define apcont (lambda (k . x)
-    (apply k x)))
 
 (define identity (lambda(x) x))
+
+(define apcont (lambda (k . x)
+    (apply k x)))
 
 ; eval-exp is the main component of the interpreter
 ; eval-exp should return a list of result.
@@ -490,9 +491,6 @@
     	   (lambda (x) (apcont k x)) ; procedure to call if id is in the environment 
          (lambda () (eopl:error 'apply-local-env "variable not found in environment: ~s" varinfo)))]
       [if-cexp (test then-op else-op)
-        ; (if (de-refer (eval-exp test env identity))
-        ;   (eval-exp then-op env identity)
-        ;   (eval-exp else-op env identity))
         (eval-exp test env
           (lambda (testResult)
             (if (de-refer testResult)
@@ -503,10 +501,6 @@
           (closure (not (= (length vars)(length ref-map)))
             ref-map body env)))]
       [set!-cexp (varinfo val)
-        ; (apply-local-env env varinfo
-        ;   (lambda(ref) (modify! ref (de-refer (eval-exp val env identity))))
-        ;   (lambda() (update-table! global-env (eval-exp val env identity))))
-        ; (refer)
         (eval-exp val env
           (lambda (v)
             (apply-local-env env varinfo
@@ -514,16 +508,11 @@
               (lambda () (update-table! global-env v)))
             (apcont k (refer))))]
       [define-cexp (var val)
-        ; (define-in-local-env! env var (eval-exp val env identity))
-        ; (refer)
         (eval-exp val env
           (lambda (v)
             (define-in-local-env! env var v)
             (apcont k (refer))))]
       [app-cexp (rator rands)
-        ; (let ([procref (eval-exp rator env identity)]
-        ;       [argsref (map (lambda(x) (eval-exp x env identity)) rands)])
-        ;   (apply-proc procref argsref identity))
         (eval-rands (cons rator rands) env
           (lambda (argsref)
             (apply-proc (car argsref) (cdr argsref) k)))]
@@ -568,21 +557,11 @@
             [(call-with-values)
               (if (not (= 2 (length args)))
                 (eopl:error 'call-with-values "call-with-values takes two parameters: a producer and a consumer: ~s" args))
-              ; (let ([ret (apply-proc (car args) '() identity)])
-              ;     (apply-proc (cadr args) (map refer (de-refer-aslist ret)) identity))
               (apply-proc (car args) '()
                 (lambda (mult-vals)
                   (apply-proc (cadr args) (map refer (de-refer-aslist mult-vals)) k)))]
             [(values) (apcont k (apply refer (map de-refer args)))])]
         [closure (vary? ref-map body env)
-          ; (let lambdaEval ([code body]
-          ;   [env (extend-local-env vary? ref-map args env
-          ;           (lambda (x) x)
-          ;           (lambda () (eopl:error 'apply-proc "not enough arguments: closure ~a ~a" proc-v args)))])
-          ;   (if (null? (cdr code))
-          ;     (eval-exp (car code) env identity)
-          ;     (begin (eval-exp (car code) env identity)
-          ;       (lambdaEval (cdr code) env))))
           (extend-local-env vary? ref-map args env
             (lambda (env) (eval-body body env k))
             (lambda () (eopl:error 'apply-proc "not enough arguments: closure ~a ~a" proc-v args)))]
