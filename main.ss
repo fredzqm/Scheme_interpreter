@@ -443,7 +443,7 @@
           (parse-exp form 
             (empty-templete) (lambda (temp result) result)) 
           (empty-local-env)
-          i)])))
+          identity)])))
 
 ; to easy typing eval-one-exp
 (define-syntax i
@@ -479,7 +479,7 @@
     (eopl:error 'modify! "Can only modify a reference with one value: ~s," ref)
     (set-box! ref val)))
 
-(define i (lambda(x) x))
+(define identity (lambda(x) x))
 
 ; eval-exp is the main component of the interpreter
 ; eval-exp should return a list of result.
@@ -494,24 +494,24 @@
     	   (lambda (x) x) ; procedure to call if id is in the environment 
          (lambda () (eopl:error 'apply-local-env "variable not found in environment: ~s" varinfo)))]
       [if-cexp (test then-op else-op)
-        (if (de-refer (eval-exp test env i))
-          (eval-exp then-op env i)
-          (eval-exp else-op env i))]
+        (if (de-refer (eval-exp test env identity))
+          (eval-exp then-op env identity)
+          (eval-exp else-op env identity))]
       [lambda-cexp (vars ref-map body)
         (refer (closure (not (= (length vars)(length ref-map)))
                         ref-map body env))]
       [set!-cexp (varinfo val)
         (apply-local-env env varinfo
-          (lambda(ref) (modify! ref (de-refer (eval-exp val env i))))
-          (lambda() (update-table! global-env (eval-exp val env i))))
+          (lambda(ref) (modify! ref (de-refer (eval-exp val env identity))))
+          (lambda() (update-table! global-env (eval-exp val env identity))))
         (refer)]
       [define-cexp (var val)
-        (define-in-local-env! env var (eval-exp val env i))
+        (define-in-local-env! env var (eval-exp val env identity))
         (refer)]
       [app-cexp (rator rands)
-        (let ([procref (eval-exp rator env i)]
-              [argsref (map (lambda(x) (eval-exp x env i)) rands)])
-          (apply-proc procref argsref i))]
+        (let ([procref (eval-exp rator env identity)]
+              [argsref (map (lambda(x) (eval-exp x env identity)) rands)])
+          (apply-proc procref argsref identity))]
       [else (eopl:error 'eval-exp "Bad abstract syntax: ~a" exp)])))
 
 ; evaluate the list of operands, putting results into a list
@@ -538,12 +538,12 @@
                       (map refer (de-refer nextarg))
                       (eopl:error 'apply "The last argument of apply should be a proper list of arguments ~s" nextarg))
                     (cons nextarg (loop (car leftarg) (cdr leftarg)))))
-                i)]
+                identity)]
             [(call-with-values)
               (if (not (= 2 (length args)))
                 (eopl:error 'call-with-values "call-with-values takes two parameters: a producer and a consumer: ~s" args))
-              (let ([ret (apply-proc (car args) '() i)])
-                  (apply-proc (cadr args) (map refer (de-refer-aslist ret)) i))]
+              (let ([ret (apply-proc (car args) '() identity)])
+                  (apply-proc (cadr args) (map refer (de-refer-aslist ret)) identity))]
             [(values) (apply refer (map de-refer args))])]
         [closure (vary? ref-map body env)
           (let lambdaEval ([code body]
@@ -551,8 +551,8 @@
                     (lambda (x) x)
                     (lambda () (eopl:error 'apply-proc "not enough arguments: closure ~a ~a" proc-v args)))])
             (if (null? (cdr code))
-              (eval-exp (car code) env i)
-              (begin (eval-exp (car code) env i)
+              (eval-exp (car code) env identity)
+              (begin (eval-exp (car code) env identity)
                 (lambdaEval (cdr code) env))))]
         [else (eopl:error 'apply-proc "Attempt to apply bad procedure: ~s" proc-v)]))))
 
