@@ -460,40 +460,40 @@
 
 ; (define bontinuation?
   ; (lambda (obj) (or (procedure? obj) (continuation? obj))))
-(define bontinuation?
-  continuation?)
+; (define bontinuation?
+;   continuation?)
 
 (define-datatype continuation continuation?
   [if-k
     (then-op cexpression?)
     (else-op cexpression?)
     (env list?)
-    (next-k bontinuation?)]
+    (next-k continuation?)]
   [eval-rands-k
-    (next-k bontinuation?)]
+    (next-k continuation?)]
   [eval-rands-car-k
     (cdr-rands (list-of cexpression?))
     (env list?)
-    (next-k bontinuation?)]
+    (next-k continuation?)]
   [eval-rands-cdr-k
     (car-ref reference?)
     (env list?)
-    (next-k bontinuation?)]
+    (next-k continuation?)]
   [set!-k
     (varinfo pair?)
     (env list?)
-    (next-k bontinuation?)]
+    (next-k continuation?)]
   [define-k
     (var symbol?)
     (env list?)
-    (next-k bontinuation?)]
+    (next-k continuation?)]
   [eval-body-k
     (cdr-code (list-of cexpression?))
     (env list?)
-    (next-k bontinuation?)]
+    (next-k continuation?)]
   [call-with-values-k
     (consumer reference?)
-    (next-k bontinuation?)]
+    (next-k continuation?)]
   [final-k])
 
 
