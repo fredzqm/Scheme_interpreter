@@ -65,7 +65,9 @@
     (variableLength boolean?)
     (ref-map (implist-of boolean?))
     (body (list-of cexpression?))
-    (env list?)])   
+    (env list?)]
+  [cont-proc
+    (k continuation?)])   
 
 
 ;-------------------+
@@ -516,7 +518,7 @@
         [set!-k (varinfo env next-k)
           (apply-local-env env varinfo
             (lambda (ref) (modify! ref (de-refer x)))
-            (lambda () (update-table! global-env x)))
+            (lambda () (update-table! global-env (car varinfo) x)))
           (apcont next-k (refer))]
         [define-k (var env next-k)
           (define-in-local-env! env var x)
@@ -594,11 +596,18 @@
                 (eopl:error 'call-with-values "call-with-values takes two parameters: a producer and a consumer: ~s" args))
               (apply-proc (car args) '()
                 (call-with-values-k (cadr args) k))]
-            [(values) (apcont k (apply refer (map de-refer args)))])]
+            [(values) 
+              (apcont k (apply refer (map de-refer args)))]
+            [(call/cc)
+              (if (not (null? (cdr args)))
+                (eopl:error 'call/cc "call/cc only take one argument: ~s" args))
+              (apply-proc (car args) (list (refer (cont-proc k))) k)])]
         [closure (vary? ref-map body env)
           (extend-local-env vary? ref-map args env
             (lambda (env) (eval-body body env k))
             (lambda () (eopl:error 'apply-proc "not enough arguments: closure ~a ~a" proc-v args)))]
+        [cont-proc (k)
+          (apcont k (apply refer (map de-refer args)))]
         [else (eopl:error 'apply-proc "Attempt to apply bad procedure: ~s" proc-v)])))
 
 (define (eval-body code env k)
@@ -640,7 +649,7 @@
 
 
 
-(define *spec-proc-names* '(apply values call-with-values))
+(define *spec-proc-names* '(apply values call-with-values call/cc))
 (define *prim-proc-names* '(+ - * / add1 sub1 zero? not = < > <= >= cons list null? assq eq?
                             eqv? equal? atom? car caar caaar caadr cadar cdaar caddr cdadr cddar cdddr cadr cdar
                             cddr cdr length list->vector list? pair? append list-tail

@@ -32,4 +32,10 @@
   [(push e)
       (set! s (cons e s))])
 
+(with-values
+  (call/cc 
+    (lambda (k)
+      (set! exit-list k)))
+  list)
+
 )))
