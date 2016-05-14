@@ -366,6 +366,10 @@
 ;                       |
 ;-----------------------+
 
+(define reference?
+  (lambda (x)
+    (or (box? x) (list? x))))
+
 ; these three functions define ADT reference, the return value of eval-exp
 (define (refer . a) 
   (cond
@@ -443,7 +447,7 @@
           (parse-exp form 
             (empty-templete) (lambda (temp result) result)) 
           (empty-local-env)
-          (lambda (x) x))])))
+          (final-k))])))
 
 
 ;-----------------------+
@@ -452,9 +456,78 @@
 ;                       |
 ;-----------------------+
 
+; (define bontinuation?
+  ; (lambda (obj) (or (procedure? obj) (continuation? obj))))
+(define bontinuation?
+  continuation?)
 
-(define apcont (lambda (k . x)
-    (apply k x)))
+(define-datatype continuation continuation?
+  [if-k
+    (then-op cexpression?)
+    (else-op cexpression?)
+    (env list?)
+    (next-k bontinuation?)]
+  [eval-rands-k
+    (next-k bontinuation?)]
+  [eval-rands-car-k
+    (cdr-rands (list-of cexpression?))
+    (env list?)
+    (next-k bontinuation?)]
+  [eval-rands-cdr-k
+    (car-ref reference?)
+    (env list?)
+    (next-k bontinuation?)]
+  [set!-k
+    (varinfo pair?)
+    (env list?)
+    (next-k bontinuation?)]
+  [define-k
+    (var symbol?)
+    (env list?)
+    (next-k bontinuation?)]
+  [eval-body-k
+    (cdr-code (list-of cexpression?))
+    (env list?)
+    (next-k bontinuation?)]
+  [call-with-values-k
+    (consumer reference?)
+    (next-k bontinuation?)]
+  [final-k])
+
+
+(define apcont (lambda (k x)
+    (if (procedure? k)
+      (begin
+        (display x) (newline)
+        (display k) (newline)
+        (k x))
+      (cases continuation k
+        [if-k (then-op else-op env next-k)
+          (if (de-refer x)
+            (eval-exp then-op env next-k)
+            (eval-exp else-op env next-k))]
+        [eval-rands-k (next-k)
+          (apply-proc (car x) (cdr x) next-k)]
+        [eval-rands-car-k (cdr-rands env next-k)
+          (eval-rands cdr-rands env
+            (eval-rands-cdr-k x env next-k))]
+        [eval-rands-cdr-k (car-ref env next-k)
+          (apcont next-k (cons car-ref x))]
+        [set!-k (varinfo env next-k)
+          (apply-local-env env varinfo
+            (lambda (ref) (modify! ref (de-refer x)))
+            (lambda () (update-table! global-env x)))
+          (apcont next-k (refer))]
+        [define-k (var env next-k)
+          (define-in-local-env! env var x)
+          (apcont next-k (refer))]
+        [eval-body-k (cdr-code env next-k)
+          (eval-body cdr-code env next-k)]
+        [call-with-values-k (consumer next-k)
+          (apply-proc consumer (map refer (de-refer-aslist x)) next-k)]
+        [final-k () x]
+        [else (eopl:error 'apcont "Undefined continuation: ~s" k)])
+    )))
 
 ; eval-exp is the main component of the interpreter
 ; eval-exp should return a list of result.
@@ -469,30 +542,20 @@
          (lambda () (eopl:error 'apply-local-env "variable not found in environment: ~s" varinfo)))]
       [if-cexp (test then-op else-op)
         (eval-exp test env
-          (lambda (testResult)
-            (if (de-refer testResult)
-              (eval-exp then-op env k)
-              (eval-exp else-op env k))))]
+          (if-k then-op else-op env k))]
       [lambda-cexp (vars ref-map body)
         (apcont k (refer 
           (closure (not (= (length vars)(length ref-map)))
             ref-map body env)))]
       [set!-cexp (varinfo val)
         (eval-exp val env
-          (lambda (v)
-            (apply-local-env env varinfo
-              (lambda (ref) (modify! ref (de-refer v)))
-              (lambda () (update-table! global-env v)))
-            (apcont k (refer))))]
+          (set!-k varinfo env k))]
       [define-cexp (var val)
         (eval-exp val env
-          (lambda (v)
-            (define-in-local-env! env var v)
-            (apcont k (refer))))]
+          (define-k var env k))]
       [app-cexp (rator rands)
         (eval-rands (cons rator rands) env
-          (lambda (argsref)
-            (apply-proc (car argsref) (cdr argsref) k)))]
+          (eval-rands-k k))]
       [else (eopl:error 'eval-exp "Bad abstract syntax: ~a" exp)]))
 
 
@@ -500,10 +563,7 @@
     (if (null? rands)
       (apcont k '())
       (eval-exp (car rands) env
-        (lambda (carRef)
-          (eval-rands (cdr rands) env
-            (lambda (cdrRef)
-              (apcont k (cons carRef cdrRef))))))))
+        (eval-rands-car-k (cdr rands) env k))))
 
 ; evaluate the list of operands, putting results into a list
 ;  Apply a procedure to its arguments.
@@ -533,8 +593,7 @@
               (if (not (= 2 (length args)))
                 (eopl:error 'call-with-values "call-with-values takes two parameters: a producer and a consumer: ~s" args))
               (apply-proc (car args) '()
-                (lambda (mult-vals)
-                  (apply-proc (cadr args) (map refer (de-refer-aslist mult-vals)) k)))]
+                (call-with-values-k (cadr args) k))]
             [(values) (apcont k (apply refer (map de-refer args)))])]
         [closure (vary? ref-map body env)
           (extend-local-env vary? ref-map args env
@@ -542,14 +601,10 @@
             (lambda () (eopl:error 'apply-proc "not enough arguments: closure ~a ~a" proc-v args)))]
         [else (eopl:error 'apply-proc "Attempt to apply bad procedure: ~s" proc-v)])))
 
-
 (define (eval-body code env k)
     (eval-exp (car code) env
       (if (null? (cdr code)) k
-        (lambda (carVal)
-          (eval-body (cdr code) env k)))))
-
-
+        (eval-body-k (cdr code) env k))))
 
 ;-----------------------+
 ;                       |
