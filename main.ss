@@ -322,7 +322,7 @@
               [(symbol? varls) (k (list varls) '())]
               [(pair? varls)
                 (helper (cdr varls)
-                  (lambda (cdrVars cdrref-map)
+                  (lambda (cdrVars cdrRef-map)
                     (cond
                       [(symbol? (car varls))
                         (k
