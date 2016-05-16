@@ -38,4 +38,26 @@
       (set! exit-list k)))
   list)
 
+
+
+(define resume 'resume-undefined)
+
+(define make-coroutine
+  (lambda (body)
+    (let ([local-continuation 'local-continuation-undefined])
+      (letrec
+          ([newcoroutine
+            (lambda  (value) (local-continuation value))]
+           [localresume
+            (lambda  (continuation value)
+              (let ([value (call/cc (lambda (k)
+                                      (set! local-continuation k)
+                                      (continuation value)))])
+                (set! resume localresume)
+                value))])
+        (call/cc
+         (lambda (exit)
+           (body (localresume exit newcoroutine))
+           (error 'co-routine "fell off end of coroutine")))))))
+
 )))

@@ -401,7 +401,6 @@
     (set-box! ref val)))
 
 
-
 ;-------------------+
 ;                   |
 ;   INTERPRETER     |
@@ -458,11 +457,6 @@
 ;                       |
 ;-----------------------+
 
-; (define bontinuation?
-  ; (lambda (obj) (or (procedure? obj) (continuation? obj))))
-; (define bontinuation?
-;   continuation?)
-
 (define-datatype continuation continuation?
   [if-k
     (then-op cexpression?)
@@ -497,6 +491,7 @@
   [final-k])
 
 
+
 (define apcont (lambda (k x)
     (if (procedure? k)
       (begin
@@ -528,8 +523,7 @@
         [call-with-values-k (consumer next-k)
           (apply-proc consumer (map refer (de-refer-aslist x)) next-k)]
         [final-k () x]
-        [else (eopl:error 'apcont "Undefined continuation: ~s" k)])
-    )))
+        [else (eopl:error 'apcont "Undefined continuation: ~s" k)]))))
 
 ; eval-exp is the main component of the interpreter
 ; eval-exp should return a list of result.
@@ -687,7 +681,10 @@
 (define-syntax i
   (syntax-rules ()
     [(_ x)
-      (eval-one-exp (quote x))]))
+      (eval-one-exp (quote x))]
+    [(_ x1 x2 ...)
+      (eval-many-exps 
+        (list (quote x1) (quote x2) ...))]))
 
 ; to ease tracing
 (define t
