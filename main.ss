@@ -444,11 +444,13 @@
       [(and (pair? form) (eq? (car form) 'define-syntax)
         (eval-define-syntax (cdr form)))]
       [else 
-        (eval-exp 
-          (parse-exp form 
-            (empty-templete) (lambda (temp result) result)) 
-          (empty-local-env)
-          (final-k))])))
+        (parse-exp form 
+          (empty-templete)
+          (lambda (temp result)
+            (eval-exp
+              result
+              (empty-local-env)
+              (final-k))))]))) 
 
 
 ;-----------------------+
@@ -577,13 +579,8 @@
             [(apply)
               (if (null? (cdr args))
                 (eopl:error 'apply "with no argument ~s" proc-v))
-              (apply-proc (car args)
-                (let loop ([nextarg (cadr args)] [leftarg (cddr args)]) ; Caution: No error-checking for 0 args
-                  (if (null? leftarg)
-                    (if (list? (de-refer nextarg))
-                      (map refer (de-refer nextarg))
-                      (eopl:error 'apply "The last argument of apply should be a proper list of arguments ~s" nextarg))
-                    (cons nextarg (loop (car leftarg) (cdr leftarg)))))
+              (apply-proc (car args) 
+                (map refer (apply cons* (map de-refer (cdr args))))
                 k)]
             [(call-with-values)
               (if (not (= 2 (length args)))
