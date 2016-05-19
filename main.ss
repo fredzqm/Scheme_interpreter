@@ -418,15 +418,15 @@
           (eopl:pretty-print (car answers))
           (displayLoop (cdr answers)))))))
 
-; (define (toString v)
-;   (if (proc-val? v)
-;     (cases proc-val v
-;       [prim-proc (name)
-;         (list 'prim-proc name)]
-;       [special-proc (name)
-;         (list 'prim-proc name)]
-;       [closure (variableLength vars ref-map body env)
-;         (list 'lambda vars (unparse-exp body))])))
+(define (toString v)
+  (if (proc-val? v)
+    (cases proc-val v
+      [prim-proc (name)
+        (list 'prim-proc name)]
+      [special-proc (name)
+        (list 'prim-proc name)]
+      [closure (variableLength vars ref-map body env)
+        (list 'lambda vars (unparse-exp body))])))
 
 ; the separate interpreter entry
 (define eval-one-exp

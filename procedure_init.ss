@@ -39,6 +39,24 @@
   list)
 
 
+(with-values
+  (call/cc 
+    (lambda (k)
+      (set! exit-list k)))
+  list)
+
+(with-values
+  (call/cc 
+    (lambda (k)
+      (set! values-escape k)))
+  values)
+
+(define escaper
+  (lambda (p)
+    (lambda args
+      (with-values
+        (apply p args)
+        values-escape))))
 
 (define resume 'resume-undefined)
 
