@@ -78,4 +78,22 @@
            (body (localresume exit newcoroutine))
            (error 'co-routine "fell off end of coroutine")))))))
 
+
+(define **trace-level** 0)
+
+(define (**displayIndent**)
+  (let loop ([i **trace-level**])
+    (display "| ")
+    (if (< 0 i)
+      (loop (- i 1)))))
+        
+(define (**displayIndent+**)
+  (**displayIndent**)
+  (set! **trace-level** (+ **trace-level** 1)))
+
+(define (**displayIndent-**)
+  (set! **trace-level** (- **trace-level** 1))
+  (**displayIndent**))
+
+
 )))

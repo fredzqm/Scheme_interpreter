@@ -124,12 +124,17 @@
               (let-values ([args2 v2] ...)
                 e1 e2 ...)))]))
 
-(define-syntax do1
-  (syntax-rules (while)
-    [(_ (e1 e2 ...) while test)
-      (begin
-        e1 e2 ...
-        (while test e1 e2 ...))]))
+
+(define-syntax trace-lambda
+  (syntax-rules ()
+    [(_ name (a ...) e1 e2 ...)
+      (lambda (a ...)
+        (**displayIndent+**)
+        (display (list 'name a ...)) (newline)
+        (let ([ret ((lambda (a ...) e1 e2 ...) a ...)])
+          (**displayIndent-**)
+          (display ret) (newline)
+          ret))]))
 
 )))
 
