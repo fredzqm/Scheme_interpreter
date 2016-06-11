@@ -79,13 +79,6 @@
       (if p1 e1
         (cond (p2 e2) ...))]))
 
-(define-syntax while
-  (syntax-rules ()
-    [(_ test e1 e2 ...)
-      (let loop ()
-        (if test (begin e1 e2 ... (loop))))]))
-
-
 (define-syntax case
   (syntax-rules (else)
     [(_ sym ((p1 p2 ...) e1 e2 ... ) ... (else l1 l2 ...))
@@ -125,16 +118,40 @@
                 e1 e2 ...)))]))
 
 
-(define-syntax trace-lambda
+; (define-syntax trace-lambda
+;   (syntax-rules ()
+;     [(_ name (a ...) e1 e2 ...)
+;       (lambda (a ...)
+;         (**displayIndent+**)
+;         (display (list 'name a ...)) (newline)
+;         (let ([ret ((lambda (a ...) e1 e2 ...) a ...)])
+;           (**displayIndent-**)
+;           (display ret) (newline)
+;           ret))]))
+
+(define-syntax trace
   (syntax-rules ()
-    [(_ name (a ...) e1 e2 ...)
-      (lambda (a ...)
-        (**displayIndent+**)
-        (display (list 'name a ...)) (newline)
-        (let ([ret ((lambda (a ...) e1 e2 ...) a ...)])
-          (**displayIndent-**)
-          (display ret) (newline)
-          ret))]))
+    [(_ func ...)
+      (begin
+        (set! func
+          (let ([originalFuc func]) 
+            (lambda args
+              (**displayIndent+**)
+              (display (cons 'func args)) (newline)
+              (let ([ret (apply originalFuc args)])
+                (**displayIndent-**)
+                (display ret) (newline)
+                ret)))) ...
+        (list (quote func) ...))]))
+
+
+(define-syntax while
+  (syntax-rules ()
+    [(_ test e1 e2 ...)
+      (call/cc (lambda (break)
+        (let continue ()
+          (break (if test (begin e1 e2 ... (continue)))))))]))
+
 
 )))
 

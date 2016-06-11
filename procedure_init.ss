@@ -32,23 +32,14 @@
   [(push e)
       (set! s (cons e s))])
 
-(with-values
-  (call/cc 
-    (lambda (k)
-      (set! exit-list k)))
-  list)
-
+(define exit-list
+  (lambda x
+    (return x)))
 
 (with-values
   (call/cc 
     (lambda (k)
-      (set! exit-list k)))
-  list)
-
-(with-values
-  (call/cc 
-    (lambda (k)
-      (set! values-escape k)))
+      (set! return k)))
   values)
 
 (define escaper
@@ -56,7 +47,7 @@
     (lambda args
       (with-values
         (apply p args)
-        values-escape))))
+        return))))
 
 (define resume 'resume-undefined)
 
@@ -95,5 +86,20 @@
   (set! **trace-level** (- **trace-level** 1))
   (**displayIndent**))
 
+
+(define display-traced-output
+  (let ([multi-indent-string
+   (lambda (level)
+     (let loop ([level level] [result ""])
+       (if (zero? level)
+     result
+     (loop (- level 1) (string-append result "| ")))))])
+  (lambda args   ; (level proc-name args) or (level answer)
+    (let ([indent-string (multi-indent-string (car args))])
+      (display indent-string)
+      (display (if (= 2(length args))
+       (cadr args)
+       (cons (cadr args) (caddr args)))))
+      (newline))))
 
 )))
