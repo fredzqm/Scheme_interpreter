@@ -1,9 +1,32 @@
 # Interpreter for Scheme
 This is a term project for CSSE304 (Programming language concept).
 
-It is essentially an interpreter for Scheme written in Scheme.
-To simply basic operation, we use primitive procedure in Scheme, such as car, cdr etc.
-However, we implemented many coreSyntax of Scheme, such as lambda, set!, define. We use Scheme's "if" to implement our if since we can't really write program without branches.
+# What is Scheme?
+[Scheme](http://scheme.com/tspl4/) was designed by MIT, and served as the first programming class in MIT until 2009 [[1]](https://cemerick.com/2009/03/24/why-mit-now-uses-python-instead-of-scheme-for-its-undergraduate-cs-program/).
+
+Though Scheme is not used widely in the industry, it convey many fundamental ideas about the programming lanugage.
+Instead of defining numerous syntax, scheme only has very minimum core expression, while most others are expanded into core expressions. 
+Scheme captures his brilliant idea of growing language because programmers can define new syntax with [define-syntax](http://scheme.com/tspl4/syntax.html#./syntax:s12)!!
+Most other syntaxes are converted to lambda (function), if (branching) and set! (variable assignment) before evaluating. Those core expression catpure the very basic a programming needs to do in low-level.
+Guy Steele's famous talk -- [growing language](http://www.youtube.com/watch?v=_ahvzDzKdB0), captures the gist of such extendable programming lanugage.
+
+# Introduction to this project
+Ihis project is essentially a Scheme interpreter written in Scheme. It is course project for CSSE403 (Programming Language Concept) at Rose-Hulman Institute of Technology.
+
+Way beyond the scope of the course, I decided that I want to actually implement syntax expansion because I am so fasciniated with this growing language idea. It took me two days coding and debugging to implement a syntax expander that decides whether an expression matches a pattern and expand it into a different expression. It worked so well that our core interpreter evaluation loop only needs to be concerned with fundamental core syntax.
+
+### It is not all about implementing a <b>define-syntax</b>, but also design decisions!
+To implement many different syntax in the interpreter, I have two ways:
+1. Add extra cases to the evaluating loop
+2. Implement a syntax expander and then add a rule to the syntax expander with <b>define-syntax</b>.
+The first way requires a lot of work changing many places in the kernel evaluation loop.
+The second way requires significant amount of effort at the beginning, but very little work to add a new syntax later on.
+As a perfectionist, I chose the second way, because I believe a good design structure might be harder to set up but will save my time in the future.
+
+
+Disclaimer: To simply basic operation, we use primitive procedure in Scheme, such as car, cdr etc.
+However, we implemented many core expression of Scheme, such as lambda, set!, define. 
+We use Scheme's "if" to implement our if since we can't really write program without branches.
 
 #API
 
