@@ -17,8 +17,10 @@ Way beyond the scope of the course, I decided that I want to actually implement 
 
 ### It is not all about implementing a <b>define-syntax</b>, but also design decisions!
 To implement many different syntax in the interpreter, I have two ways:
+
 1. Add extra cases to the evaluating loop
 2. Implement a syntax expander and then add a rule to the syntax expander with <b>define-syntax</b>.
+
 The first way requires a lot of work changing many places in the kernel evaluation loop.
 The second way requires significant amount of effort at the beginning, but very little work to add a new syntax later on.
 As a perfectionist, I chose the second way, because I believe a good design structure might be harder to set up but will save my time in the future.
