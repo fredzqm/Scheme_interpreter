@@ -57,7 +57,7 @@ This is some feature that standard scheme does not have. Starndard Scheme only s
 
 Arbitrary local define introduce uncertainly to execution, since the interpreter cannot determine whether certain variable is bounded or not at run time. For example,
 
-``
+```
 (define example1
 	(lambda (x)
 		(if x
@@ -65,13 +65,13 @@ Arbitrary local define introduce uncertainly to execution, since the interpreter
 			(define b 1))
 		a
 		b))
-``
+```
 
 In this exmaple, if x is true, a is defined, but if x is #f, b is defined. Whether a and b are bounded or not can only be determined at run time. This troubles efficient lexical order implementation, since interperter are not sure where to get the value.
 
 In the following a bit more complex example, local defined variable can hide outer scope variable. If x is #f, a is not define in the inner scope, so the result is 1 + 2 = 3, but if x is true, the local define hides the outer a, so the result is 3 + 2 = 5.
 
-``
+```
 (define example2 
 	(lambda (x)
 		(let ([a 1][b 2])
@@ -79,7 +79,7 @@ In the following a bit more complex example, local defined variable can hide out
 				(if x
 					(define a 3))
 				(+ a b)))))
-``
+```
 
 Those undeterminstic is difficult to implement, but we find a way.
 Instead of having a simple two kind of lexical order -- bounded and free, this interpreter has three.
