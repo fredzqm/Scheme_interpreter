@@ -535,8 +535,8 @@
     (cases cexpression exp
       [lit-cexp (datum) (apcont k (refer datum))]
       [var-cexp (varinfo)
-				(apply-local-env env varinfo ; look up its value.
-    	   (lambda (x) (apcont k x)) ; procedure to call if id is in the environment 
+        (apply-local-env env varinfo ; look up its value.
+         (lambda (x) (apcont k x)) ; procedure to call if id is in the environment 
          (lambda () (eopl:error 'apply-local-env "variable not found in environment: ~s" varinfo)))]
       [if-cexp (test then-op else-op)
         (eval-exp test env
